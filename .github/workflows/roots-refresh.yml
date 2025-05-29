@@ -34,6 +34,13 @@ jobs:
       run: |
         pip install -r requirements.txt
     
+    - name: Download Wiktionary dump
+      run: |
+        echo "📥 Downloading Wiktionary dump..."
+        curl -L -o data/wiktionary-data.jsonl.gz https://kaikki.org/dictionary/English/kaikki.org-dictionary-English.jsonl.gz
+        echo "✅ Download complete"
+        ls -lh data/wiktionary-data.jsonl.gz
+    
     - name: Build etymology corpus
       run: |
         echo "Building etymology corpus..."
