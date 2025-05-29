@@ -5,13 +5,13 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "etymobot"
 version = "1.0.0"
-description = "Automated etymology discovery and Twitter posting bot"
+description = "GitHub-native etymology discovery and Twitter posting bot"
 authors = [
     {name = "EtymoBot Project", email = "contact@etymobot.dev"}
 ]
 readme = "README.md"
 license = {file = "LICENSE"}
-keywords = ["etymology", "twitter", "bot", "linguistics", "nlp"]
+keywords = ["etymology", "twitter", "bot", "linguistics", "wiktionary"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Education",
@@ -22,18 +22,12 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
-    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Information Analysis",
     "Topic :: Text Processing :: Linguistic",
 ]
 requires-python = ">=3.10"
 dependencies = [
-    "requests>=2.32.0",
     "tweepy>=4.15.0",
-    "openai>=1.80.0",
-    "wordfreq>=3.1.0",
-    "beautifulsoup4>=4.13.0",
-    "pytz>=2025.2",
-    "numpy>=2.1.0",
 ]
 
 [project.optional-dependencies]
@@ -44,9 +38,6 @@ dev = [
     "black>=24.0.0",
     "flake8>=7.0.0",
     "mypy>=1.16.0",
-    "autopep8>=2.3.0",
-    "types-pytz>=2025.2.0",
-    "types-requests>=2.32.0",
 ]
 test = [
     "pytest>=8.0.0",
@@ -55,16 +46,10 @@ test = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/username/etymobot"
-Repository = "https://github.com/username/etymobot"
-Documentation = "https://github.com/username/etymobot/blob/main/README.md"
-Issues = "https://github.com/username/etymobot/issues"
-
-[project.scripts]
-etymobot = "etymobot.cli:main"
-
-[tool.setuptools.packages.find]
-where = ["src"]
+Homepage = "https://github.com/username/etymological"
+Repository = "https://github.com/username/etymological"
+Documentation = "https://github.com/username/etymological/blob/main/README.md"
+Issues = "https://github.com/username/etymological/issues"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -112,8 +97,6 @@ strict_equality = true
 
 [[tool.mypy.overrides]]
 module = [
-    "wordfreq.*",
     "tweepy.*",
-    "bs4.*",
 ]
 ignore_missing_imports = true 
