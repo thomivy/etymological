@@ -27,7 +27,7 @@ except ModuleNotFoundError:  # Keep scripts runnable without the package
     openai = None
 
 # Import our canonicalization utilities for trivial affix checking
-from utils_roots import looks_like_trivial_affix
+from utils_roots import looks_like_trivial_affix, looks_like_questionable_pairing
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -266,10 +266,36 @@ sabotage began with a wooden shoe, a protest stomp that still echoes in the gear
 
             content = response.choices[0].message.content.strip()
 
+            # Log the actual response for debugging
+            logger.info(f"OpenAI response for {word1}+{word2} (root: {root}): '{content}'")
+
             # Validate response
-            if len(content) > 280 or "ABORT" in content.upper():
-                logger.warning(f"OpenAI response invalid: {len(content)} chars or ABORT detected")
-                return None  # fallback to templates
+            if not content:
+                logger.warning(f"OpenAI returned empty response")
+                return None
+            
+            if "ABORT" in content.upper():
+                logger.warning(f"OpenAI correctly ABORTed invalid etymology: {word1}+{word2} (root: {root})")
+                return None
+            
+            if len(content) > 280:
+                logger.warning(f"OpenAI response too long: {len(content)} chars, truncating...")
+                # Try to truncate at sentence boundary
+                sentences = content.split('. ')
+                if len(sentences) > 1:
+                    content = sentences[0] + '.'
+                else:
+                    content = content[:277] + "..."
+                
+                # Check if truncated version is still too long
+                if len(content) > 280:
+                    logger.warning(f"Even truncated response too long ({len(content)} chars), using template fallback")
+                    return None
+            
+            # Final validation - must contain both words and root
+            if word1.lower() not in content.lower() or word2.lower() not in content.lower():
+                logger.warning(f"OpenAI response missing required words: {word1}, {word2}")
+                return None
 
             return content
 
@@ -281,10 +307,11 @@ sabotage began with a wooden shoe, a protest stomp that still echoes in the gear
 class PairSelector:
     """Handles word pair selection and posted history."""
     
-    def __init__(self, roots_file: str, posted_file: str, include_trivial: bool = False):
+    def __init__(self, roots_file: str, posted_file: str, include_trivial: bool = False, include_questionable: bool = False):
         self.roots_file = roots_file
         self.posted_file = posted_file
         self.include_trivial = include_trivial
+        self.include_questionable = include_questionable
         self.roots_data = self._load_roots()
         self.posted_pairs = self._load_posted()
     
@@ -372,6 +399,11 @@ class PairSelector:
                             logger.debug(f"Skipping trivial affix pair: {word1} + {word2} (root: {root})")
                             continue
                         
+                        # Filter questionable etymological pairings
+                        if not self.include_questionable and looks_like_questionable_pairing(root, word1, word2):
+                            logger.debug(f"Skipping questionable pairing: {word1} + {word2} (root: {root})")
+                            continue
+                        
                         candidates.append((root, word1, word2, gloss))
         
         if not candidates:
@@ -409,6 +441,8 @@ def main():
                       help='Generate tweet but do not post to Twitter')
     parser.add_argument('--include-trivial', '-t', action='store_true',
                       help='Include trivial morphological pairs (e.g., car/carriage)')
+    parser.add_argument('--include-questionable', '-q', action='store_true',
+                      help='Include questionable etymological pairings (e.g., proper noun mixtures)')
     parser.add_argument('--verbose', '-v', action='store_true',
                       help='Enable verbose logging')
     
@@ -419,7 +453,7 @@ def main():
     
     try:
         # Initialize components
-        selector = PairSelector(args.roots, args.posted, include_trivial=args.include_trivial)
+        selector = PairSelector(args.roots, args.posted, include_trivial=args.include_trivial, include_questionable=args.include_questionable)
         poster = TwitterPoster(dry_run=args.dry_run)
         
         # Select a fresh pair

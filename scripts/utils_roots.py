@@ -209,6 +209,45 @@ def looks_like_trivial_affix(root: str, word1: str, word2: str) -> bool:
     return root_clean in word1_lower and root_clean in word2_lower
 
 
+def looks_like_questionable_pairing(root: str, word1: str, word2: str) -> bool:
+    """
+    Check if a pairing looks questionable for etymological accuracy.
+    
+    Returns True if the pairing seems suspect (e.g., proper nouns mixed 
+    with common words, or implausible connections).
+    """
+    if not root or not word1 or not word2:
+        return False
+    
+    # Check for proper noun + common word mixtures (usually false groupings)
+    word1_capitalized = word1[0].isupper() if word1 else False
+    word2_capitalized = word2[0].isupper() if word2 else False
+    
+    # If one is capitalized and one isn't, likely a false grouping
+    if word1_capitalized != word2_capitalized:
+        return True
+    
+    # Suspicious patterns in proper nouns
+    proper_noun_patterns = ['anselm', 'oslo', 'æsir', 'angier']
+    common_words = [word1.lower(), word2.lower()]
+    
+    # If both are in the suspicious patterns list, likely false grouping
+    if all(word in proper_noun_patterns for word in common_words):
+        return True
+    
+    # Very short roots with unrelated words are often false
+    if len(root.replace('(', '').replace(')', '').replace('-', '')) <= 3:
+        # Check if words seem unrelated
+        word1_base = word1.lower()[:3]
+        word2_base = word2.lower()[:3]
+        
+        # If they don't share any common letter patterns, likely false
+        if not any(c in word2_base for c in word1_base):
+            return True
+    
+    return False
+
+
 # Test cases for development
 def _test_canonical_id():
     """Test cases for canonical_id function."""
