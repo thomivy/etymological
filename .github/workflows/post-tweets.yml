@@ -38,19 +38,13 @@ jobs:
     
     - name: Install dependencies
       run: |
-        pip install tweepy
+        pip install -r requirements.txt
     
     - name: Verify corpus exists
       run: |
         if [ ! -f "data/roots.json.gz" ]; then
-          echo "❌ Etymology corpus not found. Running initial build..."
-          pip install requests beautifulsoup4 wordfreq
-          python scripts/build_roots.py --output data/roots.json.gz --sample-size 200
-          
-          if [ ! -f "data/roots.json.gz" ]; then
-            echo "❌ Failed to build etymology corpus"
-            exit 1
-          fi
+          echo "❌ Etymology corpus not found. Please run corpus refresh workflow first."
+          exit 1
         else
           echo "✅ Etymology corpus found"
           python -c "
@@ -67,6 +61,7 @@ jobs:
         TWITTER_CONSUMER_SECRET: ${{ secrets.TWITTER_CONSUMER_SECRET }}
         TWITTER_ACCESS_TOKEN: ${{ secrets.TWITTER_ACCESS_TOKEN }}
         TWITTER_ACCESS_TOKEN_SECRET: ${{ secrets.TWITTER_ACCESS_TOKEN_SECRET }}
+        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       run: |
         # Determine if this is a dry run
         DRY_RUN_FLAG=""
