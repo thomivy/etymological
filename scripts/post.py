@@ -20,6 +20,12 @@ from pathlib import Path
 from typing import Dict, List, Tuple, Set, Optional
 import tweepy
 
+# Optional OpenAI import (only if API key provided)
+try:
+    import openai  # type: ignore
+except ModuleNotFoundError:  # Keep scripts runnable without the package
+    openai = None
+
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -31,6 +37,12 @@ class TwitterPoster:
     def __init__(self, dry_run: bool = False):
         self.dry_run = dry_run
         self.twitter_client = None
+        # Detect whether we should use OpenAI for tweet generation
+        self.use_ai = bool(os.getenv('OPENAI_API_KEY') and openai is not None)
+        
+        if self.use_ai:
+            # Explicitly set the API key so the openai library works in GitHub Actions
+            openai.api_key = os.getenv('OPENAI_API_KEY')
         
         # Tweet templates for variety (hand-crafted micro-templates)
         self.templates = [
@@ -132,7 +144,16 @@ class TwitterPoster:
             raise
     
     def generate_tweet(self, word1: str, word2: str, root: str) -> str:
-        """Generate a tweet for the given word pair and root."""
+        """Generate a tweet for the given word pair and root.
+
+        Priority: OpenAI generation (if enabled) → template fallback."""
+
+        if self.use_ai:
+            tweet_ai = self._generate_tweet_ai(word1, word2, root)
+            if tweet_ai:
+                return tweet_ai
+
+        # === Template fallback ===
         template = random.choice(self.templates)
         
         # Prepare template variables
@@ -178,6 +199,53 @@ class TwitterPoster:
             
         except Exception as e:
             logger.error(f"Failed to post tweet: {e}")
+            return None
+
+    # ------------------------------------------------------------------
+    # OpenAI helper
+    # ------------------------------------------------------------------
+    def _generate_tweet_ai(self, word1: str, word2: str, root: str) -> Optional[str]:
+        """Call OpenAI to craft a tweet following the specified template.
+
+        Returns None on failure so caller can fallback to template."""
+
+        if not self.use_ai:
+            return None
+
+        try:
+            prompt = (
+                "Compose a single tweet no longer than 280 characters that follows this template:\n\n"
+                f"{word1} · {word2} — *{root}* (\"<root-gloss>\"). <One-sentence narrative showing how the two words diverged, including a vivid, concrete image>. <One-sentence reflection or question that invites the reader to ponder language or life.>\n\n"
+                "Instructions\n"
+                "1. Replace <root-gloss> with a terse English gloss for the root.\n"
+                "2. Use lively but accessible diction—no emojis, no hashtags, no academic jargon.\n"
+                "3. Keep everything under 280 characters total.\n"
+                "4. Prefer strong verbs and sensory nouns; avoid unnecessary adverbs.\n"
+                "5. Do not repeat any pair posted previously (the calling code enforces this, but refrain anyway)."
+            )
+
+            messages = [
+                {"role": "system", "content": "You are a creative etymology tweeting assistant."},
+                {"role": "user", "content": prompt},
+            ]
+
+            response = openai.ChatCompletion.create(
+                model="gpt-3.5-turbo",
+                messages=messages,
+                temperature=0.7,
+                max_tokens=128,
+            )
+
+            content = response.choices[0].message.content.strip()
+
+            # Final sanity check
+            if len(content) > 280:
+                content = content[:279]
+
+            return content
+
+        except Exception as e:
+            logger.error(f"OpenAI generation failed: {e}. Falling back to templates.")
             return None
 
 
