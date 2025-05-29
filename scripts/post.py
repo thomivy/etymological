@@ -165,6 +165,7 @@ Return JSON: {"word1": "word", "word2": "word", "root": "*root", "reasoning": "b
             ("critical", "critic"): "too obvious morphological relationship",
             ("historical", "history"): "obvious derivation, not interesting",
             ("musical", "music"): "obvious adjectival form",
+            ("quarantine", "quarrel"): "different origins - quarantine from Italian quaranta (40 days), quarrel from Old French querele",
         }
         
         # Check both orientations
@@ -193,6 +194,11 @@ Return JSON: {"word1": "word", "word2": "word", "root": "*root", "reasoning": "b
         In production, this would integrate with actual web search.
         For now, we use known good patterns and AI evaluation.
         """
+        # Quick check for obviously false etymologies
+        if self._is_obviously_false_etymology(word1, word2, root):
+            logger.warning(f"Rejected obviously false etymology: {word1} + {word2} -> {root}")
+            return None
+        
         # Simulate evidence gathering (in production, would use web search)
         evidence_summary = self._simulate_evidence_gathering(word1, word2, root)
         
@@ -230,6 +236,7 @@ Return JSON: {"word1": "word", "word2": "word", "root": "*root", "reasoning": "b
         # Known false etymologies to reject
         known_false = {
             ("sinister", "southpaw"): "Southpaw is modern American boxing slang, not from Latin sinister",
+            ("quarantine", "quarrel"): "These words have different etymological origins - quarantine from Italian quaranta (40 days), quarrel from Old French querele",
         }
         
         pair_key = tuple(sorted([word1.lower(), word2.lower()]))
@@ -249,7 +256,7 @@ Return JSON: {"word1": "word", "word2": "word", "root": "*root", "reasoning": "b
     
     def _ai_fact_check(self, word1: str, word2: str, root: str, reasoning: str, evidence: str) -> float:
         """
-        Have AI fact-check the etymology claim.
+        Have AI fact-check the etymology claim using IDENTICAL standards to tweet generation.
         
         This creates a self-verification loop where AI scrutinizes its own claims.
         """
@@ -263,34 +270,36 @@ Return JSON: {"word1": "word", "word2": "word", "root": "*root", "reasoning": "b
                         "role": "system",
                         "content": """You are a rigorous etymological fact-checker using IDENTICAL standards to EtymoWriter.
 
-CRITICAL: If EtymoWriter would ABORT this etymology, you must rate it LOW confidence (0.3 or below).
+CRITICAL: Use the EXACT same standards as EtymoWriter's tweet generation. If the etymology would result in an ABORT during tweet generation, rate it 0.0-0.3.
 
-EtymoWriter ABORTs etymologies that are:
-- Too obvious (trivial/trivia, computer/compute, etc.)
-- Boring modern connections
-- Not surprising to educated readers
-- Lacking semantic drift or interesting divergence
+EtymoWriter ABORTs etymologies that:
+1. Are FACTUALLY INCORRECT or dubious
+2. Are too obvious/boring (trivial/trivia, computer/compute, etc.)
+3. Lack interesting semantic divergence
+4. Would not surprise educated readers
+5. Are modern connections without deep historical interest
 
-Only return HIGH confidence (0.7+) for etymologies that are:
-- Genuinely surprising but verifiable
-- Show interesting semantic evolution
-- Would fascinate philology experts
-- Non-obvious to most people
+EtymoWriter ACCEPTS only etymologies that:
+- Are factually accurate AND surprising
+- Show fascinating semantic evolution
+- Would intrigue philologists and linguists
+- Demonstrate non-obvious historical connections
+- Have sufficient "wow factor" for educated audiences
 
-Rate the connection considering BOTH accuracy AND interesting surprise factor."""
+RESPOND with ONLY a number 0.0-1.0. No explanation."""
                     },
                     {
                         "role": "user",
-                        "content": f"""CLAIM: "{word1}" and "{word2}" both derive from the root "{root}"
+                        "content": f"""ETYMOLOGY CLAIM: "{word1}" and "{word2}" both derive from root "{root}"
 
 REASONING: {reasoning}
 EVIDENCE: {evidence}
 
-Rate the confidence (0.0-1.0) considering BOTH etymological accuracy AND whether this would interest EtymoWriter's audience."""
+Rate confidence (0.0-1.0) using EtymoWriter's exact standards. Would this etymology pass tweet generation or be ABORTed?"""
                     }
                 ],
                 temperature=0.0,  # Zero temperature for fact-checking
-                max_tokens=50
+                max_tokens=10  # Just need a number
             )
             
             response_text = response.choices[0].message.content.strip()
@@ -303,11 +312,15 @@ Rate the confidence (0.0-1.0) considering BOTH etymological accuracy AND whether
                 if match:
                     confidence = float(match.group(1))
                     # Ensure it's in valid range
-                    return max(0.0, min(1.0, confidence))
+                    confidence = max(0.0, min(1.0, confidence))
+                    logger.debug(f"AI fact-check confidence for {word1}+{word2}: {confidence}")
+                    return confidence
                 else:
-                    return 0.5  # Default moderate confidence
+                    logger.warning(f"Could not parse confidence from: {response_text}")
+                    return 0.3  # Default low confidence when parsing fails
             except ValueError:
-                return 0.5
+                logger.warning(f"Failed to convert confidence to float: {response_text}")
+                return 0.3
                 
         except Exception as e:
             logger.warning(f"AI fact-checking failed: {e}")
@@ -435,8 +448,12 @@ class TwitterPoster:
             tweet_ai = self._generate_tweet_ai(word1, word2, root, gloss)
             if tweet_ai:
                 return tweet_ai
+            elif tweet_ai is None:
+                # OpenAI explicitly returned None (likely due to ABORT) - don't fall back to templates
+                logger.warning(f"OpenAI rejected etymology {word1}+{word2}, not falling back to templates")
+                return "ABORT"
 
-        # === Template fallback ===
+        # === Template fallback (only if AI not enabled or other errors) ===
         template = random.choice(self.templates)
         
         # Prepare template variables
