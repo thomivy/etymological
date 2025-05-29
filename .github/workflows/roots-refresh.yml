@@ -1,9 +1,9 @@
-name: Weekly Etymology Corpus Refresh
+name: Yearly Etymology Corpus Refresh
 
 on:
   schedule:
-    # Run every Saturday at 02:00 UTC (9 PM EST Friday)
-    - cron: '0 2 * * SAT'
+    # Run annually on January 1st at 02:00 UTC (good time for yearly maintenance)
+    - cron: '0 2 1 1 *'
   workflow_dispatch: # Allow manual triggering
     inputs:
       sample_size:
@@ -86,7 +86,7 @@ jobs:
         git add data/roots.json.gz
         
         # Create basic commit message
-        COMMIT_MSG="Weekly etymology corpus refresh $(date -u +%Y-%m-%d)"
+        COMMIT_MSG="Yearly etymology corpus refresh $(date -u +%Y-%m-%d)"
         git commit -m "$COMMIT_MSG"
         git push
         
