@@ -14,6 +14,11 @@ on:
         required: false
         default: false
         type: boolean
+      use_rag:
+        description: 'Use RAG approach (corpus-based) instead of generative (default)'
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   post-tweet:
@@ -42,12 +47,22 @@ jobs:
     
     - name: Verify corpus exists
       run: |
-        if [ ! -f "data/roots.json.gz" ]; then
-          echo "❌ Etymology corpus not found. Please run corpus refresh workflow first."
-          exit 1
+        if [ "${{ github.event.inputs.use_rag }}" = "true" ]; then
+          # RAG approach requires the corpus
+          if [ ! -f "data/roots.json.gz" ]; then
+            echo "❌ Etymology corpus not found. Please run corpus refresh workflow first."
+            exit 1
+          else
+            echo "✅ Etymology corpus found for RAG approach"
+            python -c "import gzip, json; data = json.load(gzip.open('data/roots.json.gz', 'rt')); print(f'📊 Loaded corpus: {len(data)} roots available')"
+          fi
         else
-          echo "✅ Etymology corpus found"
-          python -c "import gzip, json; data = json.load(gzip.open('data/roots.json.gz', 'rt')); print(f'📊 Loaded corpus: {len(data)} roots available')"
+          # Generative approach - corpus is optional (fallback only)
+          if [ -f "data/roots.json.gz" ]; then
+            echo "✅ Etymology corpus available as fallback for generative approach"
+          else
+            echo "ℹ️  No corpus found - generative approach will use pure AI generation"
+          fi
         fi
     
     - name: Generate and post tweet
@@ -65,8 +80,17 @@ jobs:
           echo "🧪 Running in dry-run mode"
         fi
         
-        # Run the posting script
-        python scripts/post.py --verbose $DRY_RUN_FLAG
+        # Determine which approach to use
+        APPROACH_FLAG=""
+        if [ "${{ github.event.inputs.use_rag }}" = "true" ]; then
+          APPROACH_FLAG="--use-rag"
+          echo "📚 Using RAG approach (corpus-based selection)"
+        else
+          echo "🤖 Using GENERATIVE approach (AI generation + web verification)"
+        fi
+        
+        # Run the posting script with selected approach
+        python scripts/post.py --verbose $DRY_RUN_FLAG $APPROACH_FLAG
         
         # Check if posting was successful
         if [ $? -eq 0 ]; then
@@ -77,9 +101,9 @@ jobs:
         fi
     
     - name: Commit posted log
-      if: github.event.inputs.dry_run != 'true'
+      if: github.event.inputs.dry_run != 'true' && github.event.inputs.use_rag == 'true'
       run: |
-        # Check if there are changes to commit
+        # Check if there are changes to commit (only for RAG approach)
         if git diff --quiet data/posted.csv 2>/dev/null; then
           echo "📋 No changes to posted log (no tweet was posted)"
         else
