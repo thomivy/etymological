@@ -32,15 +32,12 @@ jobs:
     
     - name: Install dependencies
       run: |
-        pip install requests beautifulsoup4 wordfreq
+        pip install -r requirements.txt
     
     - name: Build etymology corpus
       run: |
-        # Determine sample size
-        SAMPLE_SIZE="${{ github.event.inputs.sample_size || '300' }}"
-        
-        echo "Building etymology corpus with $SAMPLE_SIZE words..."
-        python scripts/build_roots.py --output data/roots.json.gz --sample-size $SAMPLE_SIZE --verbose
+        echo "Building etymology corpus..."
+        python scripts/build_roots.py --verbose
         
         # Check if file was created successfully
         if [ -f "data/roots.json.gz" ]; then
@@ -53,18 +50,8 @@ jobs:
     
     - name: Validate corpus
       run: |
-        python -c "
-        import gzip, json
-        with gzip.open('data/roots.json.gz', 'rt') as f:
-            data = json.load(f)
-            print(f'📊 Corpus contains {len(data)} roots with {sum(len(words) for words in data.values())} total word relationships')
-            
-            # Show sample data
-            sample_roots = list(data.keys())[:3]
-            for root in sample_roots:
-                words = data[root][:5]  # First 5 words
-                print(f'   {root}: {words}...' if len(data[root]) > 5 else f'   {root}: {words}')
-        "
+        echo "📊 Validating etymology corpus..."
+        python -c "import gzip, json; data = json.load(gzip.open('data/roots.json.gz', 'rt')); print(f'Corpus: {len(data)} roots, {sum(len(words) for words in data.values())} relationships')"
     
     - name: Check for changes
       id: check_changes
@@ -84,10 +71,7 @@ jobs:
         git config user.email "noreply@github.com"
         
         git add data/roots.json.gz
-        
-        # Create basic commit message
-        COMMIT_MSG="Yearly etymology corpus refresh $(date -u +%Y-%m-%d)"
-        git commit -m "$COMMIT_MSG"
+        git commit -m "Yearly etymology corpus refresh $(date -u +%Y-%m-%d)"
         git push
         
         echo "✅ Committed and pushed etymology corpus update"
@@ -99,13 +83,4 @@ jobs:
         else
           echo "✅ Etymology corpus refresh completed - no updates needed"
         fi
-        
-        # Log final status
-        if [ -f "data/roots.json.gz" ]; then
-          python -c "
-          import gzip, json
-          with gzip.open('data/roots.json.gz', 'rt') as f:
-              data = json.load(f)
-              print(f'📈 Final corpus: {len(data)} roots ready for tweet generation')
-          "
-        fi 
+        echo "📈 Etymology corpus is ready for tweet generation" 
