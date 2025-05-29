@@ -47,12 +47,7 @@ jobs:
           exit 1
         else
           echo "✅ Etymology corpus found"
-          python -c "
-          import gzip, json
-          with gzip.open('data/roots.json.gz', 'rt') as f:
-              data = json.load(f)
-              print(f'📊 Loaded corpus: {len(data)} roots available')
-          "
+          python -c "import gzip, json; data = json.load(gzip.open('data/roots.json.gz', 'rt')); print(f'📊 Loaded corpus: {len(data)} roots available')"
         fi
     
     - name: Generate and post tweet
@@ -107,14 +102,7 @@ jobs:
         echo "📊 Current EtymoBot Statistics:"
         
         if [ -f "data/roots.json.gz" ]; then
-          python -c "
-          import gzip, json
-          with gzip.open('data/roots.json.gz', 'rt') as f:
-              data = json.load(f)
-              total_words = sum(len(words) for words in data.values())
-              total_pairs = sum(len(words) * (len(words) - 1) // 2 for words in data.values())
-              print(f'   📚 Corpus: {len(data)} roots, {total_words} words, {total_pairs} possible pairs')
-          "
+          python -c "import gzip, json; data = json.load(gzip.open('data/roots.json.gz', 'rt')); total_words = sum(len(words) for words in data.values()); total_pairs = sum(len(words) * (len(words) - 1) // 2 for words in data.values()); print(f'   📚 Corpus: {len(data)} roots, {total_words} words, {total_pairs} possible pairs')"
         fi
         
         if [ -f "data/posted.csv" ]; then
