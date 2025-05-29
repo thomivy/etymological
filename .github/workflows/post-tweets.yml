@@ -1,4 +1,4 @@
-name: Daily Tweet Posting
+name: Daily Tweet Posting - Pure Generative AI
 
 on:
   schedule:
@@ -14,17 +14,12 @@ on:
         required: false
         default: false
         type: boolean
-      use_rag:
-        description: 'Use RAG approach (corpus-based) instead of generative (default)'
-        required: false
-        default: false
-        type: boolean
 
 jobs:
   post-tweet:
     runs-on: ubuntu-latest
     permissions:
-      contents: write  # Needed to commit posted log
+      contents: write  # Needed for any future logging
     concurrency:
       group: etymobot-tweet-posting
       cancel-in-progress: false  # Don't cancel running posts
@@ -45,26 +40,6 @@ jobs:
       run: |
         pip install -r requirements.txt
     
-    - name: Verify corpus exists
-      run: |
-        if [ "${{ github.event.inputs.use_rag }}" = "true" ]; then
-          # RAG approach requires the corpus
-          if [ ! -f "data/roots.json.gz" ]; then
-            echo "❌ Etymology corpus not found. Please run corpus refresh workflow first."
-            exit 1
-          else
-            echo "✅ Etymology corpus found for RAG approach"
-            python -c "import gzip, json; data = json.load(gzip.open('data/roots.json.gz', 'rt')); print(f'📊 Loaded corpus: {len(data)} roots available')"
-          fi
-        else
-          # Generative approach - corpus is optional (fallback only)
-          if [ -f "data/roots.json.gz" ]; then
-            echo "✅ Etymology corpus available as fallback for generative approach"
-          else
-            echo "ℹ️  No corpus found - generative approach will use pure AI generation"
-          fi
-        fi
-    
     - name: Generate and post tweet
       env:
         TWITTER_CONSUMER_KEY: ${{ secrets.TWITTER_CONSUMER_KEY }}
@@ -80,17 +55,10 @@ jobs:
           echo "🧪 Running in dry-run mode"
         fi
         
-        # Determine which approach to use
-        APPROACH_FLAG=""
-        if [ "${{ github.event.inputs.use_rag }}" = "true" ]; then
-          APPROACH_FLAG="--use-rag"
-          echo "📚 Using RAG approach (corpus-based selection)"
-        else
-          echo "🤖 Using GENERATIVE approach (AI generation + web verification)"
-        fi
+        echo "🤖 Using PURE GENERATIVE approach (AI generation + web verification)"
         
-        # Run the posting script with selected approach
-        python scripts/post.py --verbose $DRY_RUN_FLAG $APPROACH_FLAG
+        # Run the posting script
+        python scripts/post.py --verbose $DRY_RUN_FLAG
         
         # Check if posting was successful
         if [ $? -eq 0 ]; then
@@ -100,40 +68,10 @@ jobs:
           exit 1
         fi
     
-    - name: Commit posted log
-      if: github.event.inputs.dry_run != 'true' && github.event.inputs.use_rag == 'true'
-      run: |
-        # Check if there are changes to commit (only for RAG approach)
-        if git diff --quiet data/posted.csv 2>/dev/null; then
-          echo "📋 No changes to posted log (no tweet was posted)"
-        else
-          git config user.name "EtymoBot[bot]"
-          git config user.email "noreply@github.com"
-          
-          git add data/posted.csv
-          
-          # Create commit message with timestamp
-          COMMIT_MSG="Log posted tweet $(date -u +'%Y-%m-%d %H:%M UTC')"
-          git commit -m "$COMMIT_MSG"
-          git push
-          
-          echo "✅ Committed posted pair log"
-        fi
-    
     - name: Report statistics
       run: |
         # Report current statistics
         echo "📊 Current EtymoBot Statistics:"
-        
-        if [ -f "data/roots.json.gz" ]; then
-          python -c "import gzip, json; data = json.load(gzip.open('data/roots.json.gz', 'rt')); total_words = sum(len(words) for words in data.values()); total_pairs = sum(len(words) * (len(words) - 1) // 2 for words in data.values()); print(f'   📚 Corpus: {len(data)} roots, {total_words} words, {total_pairs} possible pairs')"
-        fi
-        
-        if [ -f "data/posted.csv" ]; then
-          POSTED_COUNT=$(wc -l < data/posted.csv 2>/dev/null || echo "0")
-          echo "   📝 Posted: $POSTED_COUNT tweets"
-        else
-          echo "   📝 Posted: 0 tweets"
-        fi
-        
+        echo "   🤖 Approach: Pure Generative AI + Web Search"
+        echo "   🔍 No corpus required - AI generates all etymologies"
         echo "   🕒 Last run: $(date -u +'%Y-%m-%d %H:%M:%S UTC')" 

@@ -1,180 +1,136 @@
-# EtymoBot 🔤
+# EtymoBot - Pure Generative AI Etymology Twitter Bot
 
-An automated etymology discovery and Twitter posting bot that finds semantically divergent word pairs sharing ancient roots, then crafts engaging tweets about their etymological connections.
+🤖 **A Twitter bot that generates fascinating etymological connections using pure AI + web search verification**
 
-## 🌟 **Key Features**
+EtymoBot discovers surprising etymological connections between English words using OpenAI's GPT-4 and verifies them through web search. No corpus required - pure AI creativity with factual verification.
 
-- **🌳 Root-based Discovery**: Processes Wiktionary dumps to extract authentic etymological roots and word relationships
-- **📊 Linguistic Accuracy**: Uses real PIE (Proto-Indo-European) roots and scholarly etymology data
-- **⏰ Smart Scheduling**: Posts 3 times daily during peak engagement hours (9 AM, 1 PM, 3 PM EST)
-- **🗄️ Simple State Management**: Tracks posted pairs using flat CSV files (no database required)
-- **🚀 GitHub-Native Pipeline**: Fully automated via GitHub Actions - no external infrastructure needed
-- **📈 Self-Improving**: Learns from posting history and avoids repetition
-- **🎭 Template Variety**: Multiple tweet formats for engaging, educational content
-- **🔄 Zero Dependencies**: ML models enahnce output but are not required, and neither are external databases. 
+## 🎯 What It Does
 
-## Requirements
+- **AI Generation**: Uses GPT-4 to generate surprising word pairs that share etymological roots
+- **Web Verification**: Searches the web to verify etymological claims before posting
+- **Literary Tweets**: Crafts poetic tweets in the style of Lydia Davis, Tolkien, and Nabokov
+- **Quality Control**: Rejects false, obvious, or uninteresting etymologies
 
-- **GitHub repository** with Actions enabled
-- **Twitter API v2 credentials** for posting
-- **2.2GB disk space** for Wiktionary dump processing (handled automatically by GitHub Actions). This can be done locally and the post-processed file uploaded.
+## 📱 Example Tweets
 
-## Example Tweets
+> "muscle and mussel both spring from *musculus* (little mouse). One flexes beneath skin, the other clings to rocks—both shaped like tiny rodents in hiding."
 
-**Root Connection**
-> gustable/gusty: "gustus" splits into gustable vs gusty.
+> "salary meets salad through *sal* (salt). Roman soldiers earned their salt; we season our greens with it—currency and cuisine, both preserved by ancient crystals."
 
-**Divergent Meanings**  
-> crimp/camp: "kampós" diverged into crimp vs camp.
+## 🚀 Quick Start
 
-**Ancient Origins**
-> weary/worse: "wer" branches into weary vs worse.
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/thomivy/etymological.git
+   cd etymological
+   ```
 
-**Semantic Evolution**
-> carriage/cargo: "carrus" evolved into carriage vs cargo.
+2. **Install dependencies**
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-**Historical Splits**
-> gear/yard: "gard" separated into gear vs yard.
+3. **Set environment variables**
+   ```bash
+   export OPENAI_API_KEY="your_openai_api_key"
+   export TWITTER_CONSUMER_KEY="your_key"
+   export TWITTER_CONSUMER_SECRET="your_secret"
+   export TWITTER_ACCESS_TOKEN="your_token"
+   export TWITTER_ACCESS_TOKEN_SECRET="your_token_secret"
+   ```
 
-## Setup
+4. **Run the bot**
+   ```bash
+   # Dry run (generate tweet but don't post)
+   python scripts/post.py --dry-run --verbose
+   
+   # Live posting
+   python scripts/post.py --verbose
+   ```
 
-### 1. Fork Repository
+## 🛠️ How It Works
 
-Fork this repository to your GitHub account.
+### 1. AI Generation
+- GPT-4 generates surprising but genuine word pairs that share etymological roots
+- Focuses on semantic drift and non-obvious connections
+- Uses creative prompting to ensure interesting discoveries
 
-### 2. Configure Secrets
+### 2. Web Verification
+- Searches DuckDuckGo for etymological evidence about both words
+- AI analyzes the search results to determine confidence
+- Only posts etymologies with high confidence (≥0.8)
 
-In your repository settings, add these secrets (Settings → Secrets and variables → Actions):
+### 3. Tweet Crafting
+- Uses a specialized "EtymoWriter" prompt for literary style
+- Creates compressed, poetic tweets showing semantic evolution
+- Includes safeguards against false or boring etymologies
 
-```bash
-# Twitter API v2 credentials
-TWITTER_CONSUMER_KEY="your-consumer-key"
-TWITTER_CONSUMER_SECRET="your-consumer-secret"
-TWITTER_ACCESS_TOKEN="your-access-token"
-TWITTER_ACCESS_TOKEN_SECRET="your-access-token-secret"
-```
+## ⚙️ Configuration
 
-### 3. Enable GitHub Actions
+The bot is configured via environment variables:
 
-Go to the Actions tab and enable workflows.
+### Required
+- `OPENAI_API_KEY`: OpenAI API key for GPT-4 access
+- `TWITTER_*`: Twitter API credentials for posting
 
-### 4. First Run
+### Optional
+- `--dry-run`: Generate tweets without posting
+- `--verbose`: Enable detailed logging
 
-Trigger the "Weekly Corpus Refresh" workflow manually to build initial data, then enable automatic posting.
+## 🤖 Automation
 
-## Usage
+The bot runs automatically via GitHub Actions:
+- **Schedule**: 3 times daily at optimal engagement hours
+- **Manual**: Can be triggered manually with optional dry-run mode
+- **Pure AI**: No corpus management or data preparation required
 
-### Automated Operation
+## 🎨 Features
 
-Once configured, the bot runs automatically:
-- **Weekly**: Refreshes etymology corpus from latest Wiktionary dumps
-- **3x Daily**: Posts tweets at optimal engagement times (13:00, 17:00, 19:00 UTC)
+- **Zero Setup**: No corpus to download or manage
+- **Real-time**: Generates fresh etymologies on demand
+- **Quality Control**: Multi-layer verification prevents false etymologies
+- **Literary Style**: Poetic, compressed tweet format
+- **Web-verified**: Uses real web search for fact-checking
 
-### Manual Testing
-
-Test locally with the scripts:
-
-```bash
-# Install dependencies
-pip install tweepy
-
-# Download Wiktionary dump
-curl -o data/wiktionary-data.jsonl.gz https://kaikki.org/dictionary/English/kaikki.org-dictionary-English.jsonl.gz
-
-# Build etymology corpus
-python scripts/build_roots.py
-
-# Test tweet generation (dry run)
-python scripts/post.py --dry-run
-```
-
-## Deployment
-
-### GitHub Actions (Recommended)
-
-The bot includes pre-configured workflows:
-
-- **`roots-refresh.yml`**: Weekly corpus updates from Wiktionary dumps
-- **`post-tweets.yml`**: 3x daily posting at optimal times
-- **Built-in concurrency controls** and error handling
-- **Automatic commit tracking** of posted pairs
-
-### Manual Scheduling
-
-For custom deployment, run the scripts directly:
-
-```bash
-# Weekly corpus refresh
-python scripts/build_roots.py
-
-# Daily posting  
-python scripts/post.py
-```
-
-## Architecture
-
-### Data Pipeline
-
-1. **Corpus Building** (`scripts/build_roots.py`):
-   - Downloads Wiktionary JSONL dumps (2.2GB)
-   - Extracts PIE roots and word relationships
-   - Outputs compressed `data/roots.json.gz`
-
-2. **Tweet Generation** (`scripts/post.py`):
-   - Loads etymology corpus and posting history
-   - Selects unposted word pairs
-   - Generates tweets using curated templates
-   - Updates `data/posted.csv` history
-
-### File Structure
+## 📊 Architecture
 
 ```
-etymological/
-├── scripts/
-│   ├── build_roots.py     # Corpus builder from Wiktionary dumps  
-│   └── post.py           # Tweet generator and poster
-├── data/
-│   ├── roots.json.gz     # Etymology corpus (3K+ roots, 10K+ words)
-│   └── posted.csv        # Posted pairs history
-└── .github/workflows/
-    ├── roots-refresh.yml # Weekly corpus refresh
-    └── post-tweets.yml   # 3x daily posting
+┌─────────────┐    ┌──────────────┐    ┌─────────────┐
+│   GPT-4     │───▶│ Web Search   │───▶│   Tweet     │
+│ Generation  │    │ Verification │    │  Posting    │
+└─────────────┘    └──────────────┘    └─────────────┘
+      ▲                     ▲                  ▲
+      │                     │                  │
+   AI Prompts         DuckDuckGo API     Twitter API
 ```
 
-### Current Statistics
+## 🔧 Development
 
-- **3,099 etymological roots** from comprehensive Wiktionary analysis
-- **10,223 word relationships** across diverse vocabulary
-- **Quality-focused extraction** using PIE root patterns and scholarly sources
-- **Authentic connections** verified against etymological databases
+The bot consists of:
+- `scripts/post.py`: Main posting script with pure generative approach
+- `.github/workflows/post-tweets.yml`: GitHub Actions automation
+- Clean, focused codebase with no legacy RAG components
 
-## Configuration
+## 📈 Why Pure Generative?
 
-### Posting Schedule
+- **Unlimited Content**: AI can generate infinite unique etymologies
+- **No Maintenance**: No corpus to update or manage
+- **Better Quality**: AI reasoning + web verification catches more errors
+- **Real-time Facts**: Always uses current web information
+- **Surprise Factor**: AI discovers connections humans might miss
 
-Default posting times (UTC):
-- 13:00 UTC (9:00 AM EST)
-- 17:00 UTC (1:00 PM EST)  
-- 19:00 UTC (3:00 PM EST)
+## 🌟 Contributing
 
-Modify the cron schedule in `.github/workflows/post-tweets.yml` to customize.
+This is a pure generative AI project focused on etymology discovery. Contributions welcome for:
+- Improved prompting strategies
+- Better web search integration
+- Enhanced fact-checking methods
+- Tweet style refinements
 
-### Etymology Sources
+## 📄 License
 
-The bot processes official Wiktionary dumps containing:
-- Proto-Indo-European reconstructions
-- Historical language etymologies  
-- Scholarly root derivations
-- Cross-referenced word families
+MIT License - See LICENSE file for details.
 
-### Template Variety
+---
 
-Multiple tweet formats ensure engaging content:
-- Simple root connections
-- Semantic divergence explanations
-- Historical evolution narratives
-- Direct root attributions
-
-## License
-
-TBD
+🐦 **Follow [@KnowEtymology](https://twitter.com/KnowEtymology)** for daily etymological discoveries!

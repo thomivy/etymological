@@ -1,146 +1,182 @@
-# EtymoBot Quick Start Guide 🚀
+# EtymoBot Quick Start - Pure Generative AI
 
-Get your etymology bot running in minutes with our GitHub-native pipeline!
+🚀 **Get your etymological Twitter bot running in 5 minutes using pure AI generation!**
 
-## 🔑 Prerequisites
+## Prerequisites
 
-1. **GitHub Account** - Free account with Actions enabled
-2. **Twitter API Credentials** - Get from [Twitter Developer Portal](https://developer.twitter.com/en/portal)
-   - Consumer Key/Secret  
-   - Access Token/Secret
+- GitHub account with Actions enabled
+- Twitter Developer account
+- OpenAI API key
+- Basic command line knowledge
 
-## ⚡ Quick Deploy (Recommended)
+## 1. Setup Repository
 
-### 1. Fork this repository
-
-Click "Fork" in the top-right corner to create your own copy.
-
-### 2. Configure Repository Secrets
-
-Go to your fork's Settings → Secrets and variables → Actions, and add:
-
+### Fork the Repository
 ```bash
-TWITTER_CONSUMER_KEY=your-consumer-key
-TWITTER_CONSUMER_SECRET=your-consumer-secret
-TWITTER_ACCESS_TOKEN=your-access-token
-TWITTER_ACCESS_TOKEN_SECRET=your-access-token-secret
-```
-
-### 3. Enable GitHub Actions
-
-1. Go to the "Actions" tab in your fork
-2. Click "I understand my workflows, go ahead and enable them"
-
-### 4. Initial Setup
-
-1. Go to Actions → "Weekly Corpus Refresh" → "Run workflow" 
-2. Wait 10-15 minutes for the etymology corpus to build
-3. Your bot will automatically start posting 3x daily!
-
-**That's it!** Your bot is now fully automated and will:
-- 🔄 Refresh etymology data weekly
-- 📱 Post tweets 3x daily at optimal times
-- 📊 Track all posted pairs automatically
-
-## 💻 Local Testing (Optional)
-
-Want to test locally before deploying? Here's how:
-
-### Setup
-
-```bash
-# Clone your fork
-git clone https://github.com/YOUR-USERNAME/etymological.git
+git clone https://github.com/thomivy/etymological.git
 cd etymological
-
-# Install dependencies  
-pip install tweepy
-
-# Download Wiktionary dump (2.2GB)
-curl -o data/wiktionary-data.jsonl.gz https://kaikki.org/dictionary/English/kaikki.org-dictionary-English.jsonl.gz
 ```
 
-### Test Commands
-
+### Install Dependencies
 ```bash
-# Build etymology corpus (takes 5-10 minutes)
-python scripts/build_roots.py
-
-# Test tweet generation (safe - no posting)
-python scripts/post.py --dry-run
-
-# Check corpus statistics
-python scripts/build_roots.py --max-entries 1000  # Smaller test corpus
+pip install -r requirements.txt
 ```
 
-## 🛠️ Advanced Configuration
+## 2. Get API Keys
 
-### Custom Posting Schedule
+### Twitter API Keys
+1. Go to [developer.twitter.com](https://developer.twitter.com)
+2. Create a new app
+3. Generate API keys and tokens
+4. Note down:
+   - Consumer Key
+   - Consumer Secret  
+   - Access Token
+   - Access Token Secret
 
-Edit `.github/workflows/post-tweets.yml` line 6:
+### OpenAI API Key
+1. Go to [platform.openai.com](https://platform.openai.com)
+2. Create API key
+3. Ensure you have GPT-4 access
+
+## 3. Configure Secrets
+
+In your GitHub repository:
+
+1. Go to **Settings** → **Secrets and variables** → **Actions**
+2. Add these repository secrets:
+
+```
+OPENAI_API_KEY=your_openai_api_key_here
+TWITTER_CONSUMER_KEY=your_twitter_consumer_key
+TWITTER_CONSUMER_SECRET=your_twitter_consumer_secret
+TWITTER_ACCESS_TOKEN=your_twitter_access_token
+TWITTER_ACCESS_TOKEN_SECRET=your_twitter_access_token_secret
+```
+
+## 4. Test Locally (Optional)
+
+### Set Environment Variables
+```bash
+export OPENAI_API_KEY="your_openai_api_key"
+export TWITTER_CONSUMER_KEY="your_key"
+export TWITTER_CONSUMER_SECRET="your_secret"
+export TWITTER_ACCESS_TOKEN="your_token"
+export TWITTER_ACCESS_TOKEN_SECRET="your_token_secret"
+```
+
+### Run Dry Test
+```bash
+# Generate a tweet without posting
+python scripts/post.py --dry-run --verbose
+```
+
+### Run Live Test  
+```bash
+# Generate and post a real tweet
+python scripts/post.py --verbose
+```
+
+## 5. Enable Automation
+
+### GitHub Actions
+The bot automatically runs **3 times daily** at optimal engagement hours:
+- 13:00 UTC (9:00 AM EST)
+- 17:00 UTC (1:00 PM EST)  
+- 19:00 UTC (3:00 PM EST)
+
+### Manual Trigger
+You can also trigger manually:
+1. Go to **Actions** tab in your repository
+2. Select "Daily Tweet Posting - Pure Generative AI"
+3. Click "Run workflow"
+4. Optionally enable "dry run" mode
+
+## 6. How It Works
+
+### Pure Generative Process
+1. **AI Generation**: GPT-4 creates surprising word pairs with shared roots
+2. **Web Verification**: Searches web for etymological evidence
+3. **Quality Check**: AI analyzes evidence for accuracy and interest
+4. **Tweet Crafting**: Creates poetic, literary-style tweets
+5. **Publishing**: Posts to Twitter if all checks pass
+
+### No Corpus Required
+- **Zero setup**: No data files to download or process
+- **Real-time**: Fresh etymologies generated on demand  
+- **Self-contained**: Everything handled by AI + web search
+
+## Example Output
+
+```
+🤖 Using PURE GENERATIVE approach - AI + Web Search verification
+✅ OpenAI API key found (length: 164 characters)
+🤖 Pure generative approach - using OpenAI API with key ending in: ...abc
+🤖 Generating verified etymology using AI + web search...
+Attempt 1: Testing muscle + mussel -> *musculus*
+✅ VERIFIED: muscle + mussel (confidence: 0.92)
+✅ Generated: muscle + mussel -> *musculus*
+📊 Confidence: 0.92
+📄 Evidence: Search '"muscle" etymology origin': Both from Latin musculus meaning little mouse...
+📱 Generated tweet: muscle and mussel both spring from *musculus* (little mouse). One flexes beneath skin, the other clings to rocks—both shaped like tiny rodents in hiding.
+✅ Tweet posting completed successfully!
+```
+
+## Troubleshooting
+
+### Common Issues
+
+**"OpenAI API key not found"**
+- Check your environment variables or GitHub secrets
+- Ensure the key starts with `sk-`
+
+**"Twitter credentials missing"**  
+- Verify all 4 Twitter secrets are set correctly
+- Check your Twitter app has write permissions
+
+**"Failed to generate verified etymology"**
+- This is normal - the bot is being selective
+- It will try up to 10 times to find a high-quality etymology
+- If repeated failures, check OpenAI API quota/billing
+
+**"Etymology was rejected as uninteresting"**
+- The AI detected the etymology wasn't surprising enough
+- This is the quality control working correctly
+
+### Debug Mode
+```bash
+python scripts/post.py --dry-run --verbose
+```
+
+This shows the full generation process without posting.
+
+## Customization
+
+### Posting Schedule
+Edit `.github/workflows/post-tweets.yml` to change the cron schedule:
 ```yaml
-- cron: '0 13,17,19 * * *'  # 9AM, 1PM, 3PM EST
+schedule:
+  - cron: '0 13,17,19 * * *'  # Current: 3x daily
 ```
 
-Change to your preferred times (in UTC).
-
-### Monitoring Your Bot
-
-- **Actions tab**: See workflow run history
-- **Data folder**: Check `posted.csv` for tweet history  
-- **Corpus stats**: View etymology data in `roots.json.gz`
-
-### Troubleshooting
-
-**No tweets posting?**
-- Check if secrets are set correctly
-- Verify workflows are enabled
-- Ensure corpus build completed successfully
-
-**Workflow failures?**
-- Check Actions tab for error logs
-- Verify Twitter API credentials
-- Check if rate limits were hit
-
-## 📋 What Happens Next
-
-Once set up, your bot will:
-
-- **📚 Build Corpus**: Extract 3,000+ etymological roots from Wiktionary
-- **🎯 Smart Selection**: Choose unposted word pairs with authentic connections
-- **📝 Generate Tweets**: Create engaging content using curated templates
-- **⏰ Optimal Timing**: Post 3x daily during peak engagement hours
-- **📊 Track History**: Avoid repeating pairs and maintain quality
-
-## 📖 Example Bot Output
-
-> gustable/gusty: "gustus" splits into gustable vs gusty.
-
-> weary/worse: "wer" branches into weary vs worse.
-
-> carriage/cargo: "carrus" evolved into carriage vs cargo.
-
-## 🏗️ Project Structure
-
-```
-etymological/
-├── scripts/
-│   ├── build_roots.py      # Extract etymology corpus from Wiktionary
-│   └── post.py            # Generate and post tweets
-├── data/
-│   ├── roots.json.gz      # Etymology corpus (auto-generated)
-│   └── posted.csv         # Tweet history (auto-updated)
-└── .github/workflows/
-    ├── roots-refresh.yml  # Weekly corpus refresh
-    └── post-tweets.yml    # 3x daily posting
+### Confidence Threshold
+In `scripts/post.py`, modify the confidence requirement:
+```python
+if verification and verification.confidence >= 0.8:  # Lower = more posts
 ```
 
-## 🚀 Next Steps
+### Tweet Style
+The bot uses a specialized "EtymoWriter" prompt. You can modify this in the `generate_tweet` method to adjust the literary style.
 
-- **Customize**: Edit templates in `scripts/post.py`
-- **Monitor**: Watch your bot's performance in the Actions tab
-- **Scale**: The system handles 10,000+ word relationships automatically
-- **Improve**: Submit issues or PRs to enhance the bot
+## Next Steps
 
-Your EtymoBot is now live and will continue running automatically! 🎉
+Once running successfully:
+- Monitor your bot's Twitter account
+- Check GitHub Actions logs for any issues
+- The bot will automatically post interesting etymologies 3x daily
+- No maintenance required - everything is generated fresh each time!
+
+---
+
+🎉 **Congratulations!** Your pure generative AI etymology bot is now live and discovering fascinating word connections!
 
