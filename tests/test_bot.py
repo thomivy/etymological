@@ -40,8 +40,7 @@ class TestEtymoBot(unittest.TestCase):
         self.config.db_path = self.temp_db.name
         
         # Mock external services to prevent actual API calls during tests
-        with patch('etymobot.services.SentenceTransformer'), \
-             patch('etymobot.services.tweepy.Client'), \
+        with patch('etymobot.services.tweepy.Client'), \
              patch('etymobot.services.openai.OpenAI'), \
              patch('etymobot.bot.EtymoBot._validate_services'):  # Skip API validation
             self.bot = EtymoBot(self.config)
@@ -64,6 +63,33 @@ class TestEtymoBot(unittest.TestCase):
         
         for table in expected_tables:
             self.assertIn(table, table_names)
+            
+        # Verify indexes are created
+        indexes = self.bot.database.cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='index'"
+        ).fetchall()
+        
+        index_names = [row[0] for row in indexes]
+        expected_indexes = [
+            'idx_rootmap_root',
+            'idx_rootmap_word',
+            'idx_rootmap_created_at',
+            'idx_posted_words',
+            'idx_posted_root',
+            'idx_posted_at',
+            'idx_failed_words_count'
+        ]
+        
+        for index in expected_indexes:
+            self.assertIn(index, index_names)
+            
+        # Verify initial database stats
+        stats = self.bot.database.get_database_stats()
+        self.assertEqual(stats['cache_size'], 0)
+        self.assertEqual(stats['unique_roots'], 0)
+        self.assertEqual(stats['total_posted'], 0)
+        self.assertEqual(stats['failed_words'], 0)
+        self.assertEqual(stats['posts_last_24h'], 0)
     
     def test_extract_root(self):
         """Test root extraction from etymology text."""
@@ -254,6 +280,32 @@ class TestEtymoBot(unittest.TestCase):
         # Should work in reverse order too
         self.assertTrue(self.bot.database.is_pair_posted(pair.word2, pair.word1))
 
+    def test_word_length_constraints(self):
+        """Test word length constraints across the system."""
+        # Test WordPair validation
+        with self.assertRaises(ValueError):
+            WordPair("a", "b", "c", 0.5)  # Words too short
+            
+        with self.assertRaises(ValueError):
+            WordPair("ab", "cd", "e", 0.5)  # Root too short
+            
+        # Test etymology service validation
+        self.assertIsNone(self.bot.etymology_service.fetch_etymology("a"))  # Word too short
+        
+        # Test database operations with short words
+        self.assertFalse(self.bot.database.add_root_mapping("a", "b"))  # Root too short
+        self.assertFalse(self.bot.database.add_root_mapping("abc", "d"))  # Word too short
+        
+        # Test valid word lengths
+        valid_pair = WordPair("valid", "words", "root", 0.5)
+        self.assertEqual(valid_pair.word1, "valid")
+        self.assertEqual(valid_pair.word2, "words")
+        self.assertEqual(valid_pair.root, "root")
+        
+        # Test database operations with valid words
+        self.assertTrue(self.bot.database.add_root_mapping("valid", "word"))
+        self.assertTrue(self.bot.database.add_root_mapping("root", "valid"))
+
 
 class TestIntegration(unittest.TestCase):
     """Integration tests with mocked external services."""
@@ -272,80 +324,99 @@ class TestIntegration(unittest.TestCase):
             'TWITTER_ACCESS_TOKEN_SECRET': 'test-access-token-secret-1234567890'
         })
         self.env_patcher.start()
+        
+        # Create config and bot
+        self.config = Config.from_env()
+        self.config.db_path = self.temp_db.name
+        
+        # Initialize bot with mocked services
+        with patch('etymobot.services.tweepy.Client'), \
+             patch('etymobot.services.openai.OpenAI'), \
+             patch('etymobot.bot.EtymoBot._validate_services'):
+            self.bot = EtymoBot(self.config)
+            
+        # Initialize test data
+        self._initialize_test_data()
+    
+    def _initialize_test_data(self):
+        """Initialize database with test data."""
+        # Add some test root mappings
+        test_data = [
+            ("greg", "gregarious"),
+            ("greg", "egregious"),
+            ("greg", "aggregate"),
+            ("sper", "desperate"),
+            ("sper", "prosper"),
+            ("sper", "despair")
+        ]
+        
+        for root, word in test_data:
+            self.bot.database.add_root_mapping(root, word)
+        
+        self.bot.database.commit()
+        
+        # Verify data was added
+        stats = self.bot.database.get_database_stats()
+        self.assertGreater(stats['cache_size'], 0)
+        self.assertGreater(stats['unique_roots'], 0)
     
     def tearDown(self):
         """Clean up integration test fixtures."""
         self.env_patcher.stop()
         os.unlink(self.temp_db.name)
     
-    @patch('etymobot.services.SentenceTransformer')
     @patch('etymobot.services.tweepy.Client')
     @patch('etymobot.services.openai.OpenAI')
-    def test_full_cycle_mock(self, mock_openai, mock_tweepy, mock_transformer):
+    def test_full_cycle_mock(self, mock_openai, mock_tweepy):
         """Test complete posting cycle with mocked services."""
-        # Set up mocks
-        mock_model = Mock()
-        mock_model.encode.return_value = [[0.1, 0.2], [0.8, 0.9]]  # Different embeddings
-        mock_transformer.return_value = mock_model
+        # Mock OpenAI embeddings response for semantic similarity
+        mock_openai_client = Mock()
         
-        # Mock cosine similarity to return low similarity (high divergence)
-        with patch('etymobot.services.util.cos_sim') as mock_cos_sim:
-            mock_cos_sim.return_value = Mock()
-            mock_cos_sim.return_value.item.return_value = 0.2  # Low similarity = high divergence
-            
-            # Mock OpenAI response
-            mock_openai_client = Mock()
-            mock_response = Mock()
-            mock_response.choices = [Mock()]
-            mock_response.choices[0].message = Mock()
-            mock_response.choices[0].message.content = "Test tweet content about etymology"
-            mock_openai_client.chat.completions.create.return_value = mock_response
-            # Mock API validation
-            mock_openai_client.chat.completions.create.return_value = mock_response
-            mock_openai.return_value = mock_openai_client
-            
-            # Mock Twitter response
-            mock_twitter_client = Mock()
-            mock_tweet_response = Mock()
-            mock_tweet_response.data = {'id': '12345'}
-            mock_twitter_client.create_tweet.return_value = mock_tweet_response
-            # Mock credentials validation
-            mock_me_response = Mock()
-            mock_me_response.data = Mock()
-            mock_me_response.data.username = "test_user"
-            mock_twitter_client.get_me.return_value = mock_me_response
-            mock_tweepy.return_value = mock_twitter_client
-            
-            # Create config and bot
-            config = Config.from_env()
-            config.db_path = self.temp_db.name
-            
-            with EtymoBot(config) as bot:
-                # Insert test root mappings
-                test_pairs = [
-                    ("greg", "gregarious"),
-                    ("greg", "egregious")
-                ]
-                
-                for root, word in test_pairs:
-                    bot.database.add_root_mapping(root, word)
-                bot.database.commit()
-                
-                # Run single cycle
-                success = bot.run_single_cycle()
-                
-                # Verify success
-                self.assertTrue(success)
-                
-                # Verify tweet was generated
-                mock_openai_client.chat.completions.create.assert_called()
-                
-                # Verify tweet was posted
-                mock_twitter_client.create_tweet.assert_called_once()
-                
-                # Verify posted pair was recorded
-                posted_count = bot.database.cursor.execute("SELECT COUNT(*) FROM posted").fetchone()[0]
-                self.assertEqual(posted_count, 1)
+        # Mock embedding responses for semantic divergence calculation
+        mock_embedding_response = Mock()
+        mock_embedding_response.data = [Mock(), Mock()]
+        mock_embedding_response.data[0].embedding = [0.1] * 1536  # Mock embedding vector
+        mock_embedding_response.data[1].embedding = [0.9] * 1536  # Different mock embedding vector
+        mock_openai_client.embeddings.create.return_value = mock_embedding_response
+        
+        # Mock chat completion response for tweet generation
+        mock_chat_response = Mock()
+        mock_chat_response.choices = [Mock()]
+        mock_chat_response.choices[0].message = Mock()
+        mock_chat_response.choices[0].message.content = "Test tweet content about etymology"
+        mock_openai_client.chat.completions.create.return_value = mock_chat_response
+        mock_openai.return_value = mock_openai_client
+        
+        # Mock Twitter response
+        mock_twitter_client = Mock()
+        mock_tweet_response = Mock()
+        mock_tweet_response.data = {'id': '12345'}
+        mock_twitter_client.create_tweet.return_value = mock_tweet_response
+        # Mock credentials validation
+        mock_me_response = Mock()
+        mock_me_response.data = Mock()
+        mock_me_response.data.username = "test_user"
+        mock_twitter_client.get_me.return_value = mock_me_response
+        mock_tweepy.return_value = mock_twitter_client
+        
+        # Run single cycle
+        success = self.bot.run_single_cycle()
+        
+        # Verify success
+        self.assertTrue(success)
+        
+        # Verify embeddings were requested for semantic similarity
+        mock_openai_client.embeddings.create.assert_called()
+        
+        # Verify tweet was generated
+        mock_openai_client.chat.completions.create.assert_called()
+        
+        # Verify tweet was posted
+        mock_twitter_client.create_tweet.assert_called_once()
+        
+        # Verify posted pair was recorded
+        posted_count = self.bot.database.cursor.execute("SELECT COUNT(*) FROM posted").fetchone()[0]
+        self.assertEqual(posted_count, 1)
 
 
 if __name__ == '__main__':
