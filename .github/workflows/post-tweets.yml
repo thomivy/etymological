@@ -1,0 +1,132 @@
+name: Daily Tweet Posting
+
+on:
+  schedule:
+    # Post 3 times daily at optimal engagement hours (UTC)
+    # 13:00 UTC = 9:00 AM EST
+    # 17:00 UTC = 1:00 PM EST  
+    # 19:00 UTC = 3:00 PM EST
+    - cron: '0 13,17,19 * * *'
+  workflow_dispatch: # Allow manual triggering
+    inputs:
+      dry_run:
+        description: 'Dry run (generate tweet but do not post)'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  post-tweet:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Needed to commit posted log
+    concurrency:
+      group: etymobot-tweet-posting
+      cancel-in-progress: false  # Don't cancel running posts
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+        cache: 'pip'
+    
+    - name: Install dependencies
+      run: |
+        pip install tweepy
+    
+    - name: Verify corpus exists
+      run: |
+        if [ ! -f "data/roots.json.gz" ]; then
+          echo "❌ Etymology corpus not found. Running initial build..."
+          pip install requests beautifulsoup4 wordfreq
+          python scripts/build_roots.py --output data/roots.json.gz --sample-size 200
+          
+          if [ ! -f "data/roots.json.gz" ]; then
+            echo "❌ Failed to build etymology corpus"
+            exit 1
+          fi
+        else
+          echo "✅ Etymology corpus found"
+          python -c "
+          import gzip, json
+          with gzip.open('data/roots.json.gz', 'rt') as f:
+              data = json.load(f)
+              print(f'📊 Loaded corpus: {len(data)} roots available')
+          "
+        fi
+    
+    - name: Generate and post tweet
+      env:
+        TWITTER_CONSUMER_KEY: ${{ secrets.TWITTER_CONSUMER_KEY }}
+        TWITTER_CONSUMER_SECRET: ${{ secrets.TWITTER_CONSUMER_SECRET }}
+        TWITTER_ACCESS_TOKEN: ${{ secrets.TWITTER_ACCESS_TOKEN }}
+        TWITTER_ACCESS_TOKEN_SECRET: ${{ secrets.TWITTER_ACCESS_TOKEN_SECRET }}
+      run: |
+        # Determine if this is a dry run
+        DRY_RUN_FLAG=""
+        if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+          DRY_RUN_FLAG="--dry-run"
+          echo "🧪 Running in dry-run mode"
+        fi
+        
+        # Run the posting script
+        python scripts/post.py --verbose $DRY_RUN_FLAG
+        
+        # Check if posting was successful
+        if [ $? -eq 0 ]; then
+          echo "✅ Tweet posting completed successfully"
+        else
+          echo "❌ Tweet posting failed"
+          exit 1
+        fi
+    
+    - name: Commit posted log
+      if: github.event.inputs.dry_run != 'true'
+      run: |
+        # Check if there are changes to commit
+        if git diff --quiet data/posted.csv 2>/dev/null; then
+          echo "📋 No changes to posted log (no tweet was posted)"
+        else
+          git config user.name "EtymoBot[bot]"
+          git config user.email "noreply@github.com"
+          
+          git add data/posted.csv
+          
+          # Create commit message with timestamp
+          COMMIT_MSG="Log posted tweet $(date -u +'%Y-%m-%d %H:%M UTC')"
+          git commit -m "$COMMIT_MSG"
+          git push
+          
+          echo "✅ Committed posted pair log"
+        fi
+    
+    - name: Report statistics
+      run: |
+        # Report current statistics
+        echo "📊 Current EtymoBot Statistics:"
+        
+        if [ -f "data/roots.json.gz" ]; then
+          python -c "
+          import gzip, json
+          with gzip.open('data/roots.json.gz', 'rt') as f:
+              data = json.load(f)
+              total_words = sum(len(words) for words in data.values())
+              total_pairs = sum(len(words) * (len(words) - 1) // 2 for words in data.values())
+              print(f'   📚 Corpus: {len(data)} roots, {total_words} words, {total_pairs} possible pairs')
+          "
+        fi
+        
+        if [ -f "data/posted.csv" ]; then
+          POSTED_COUNT=$(wc -l < data/posted.csv 2>/dev/null || echo "0")
+          echo "   📝 Posted: $POSTED_COUNT tweets"
+        else
+          echo "   📝 Posted: 0 tweets"
+        fi
+        
+        echo "   🕒 Last run: $(date -u +'%Y-%m-%d %H:%M:%S UTC')" 

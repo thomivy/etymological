@@ -129,13 +129,8 @@ dmypy.json
 .pyre/
 
 # Project specific
-etymobot.sqlite*
-test.sqlite*
 *.log
 .DS_Store
-
-# Docker
-.dockerignore
 
 # IDE
 .vscode/
@@ -143,6 +138,8 @@ test.sqlite*
 *.swp
 *.swo
 
-# Data files (keep state but exclude sensitive data)
-data/
+# Data files (keep in git for GitHub Actions)
+# Only ignore large Wiktionary dumps, keep corpus and history
+data/wiktionary-data.jsonl.gz
+data/*.jsonl*
 cache/ 

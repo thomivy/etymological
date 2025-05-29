@@ -1,164 +1,146 @@
 # EtymoBot Quick Start Guide 🚀
 
-Get your etymology bot running in minutes!
+Get your etymology bot running in minutes with our GitHub-native pipeline!
 
 ## 🔑 Prerequisites
 
-1. **OpenAI API Key** - Get from [OpenAI Platform](https://platform.openai.com/api-keys)
+1. **GitHub Account** - Free account with Actions enabled
 2. **Twitter API Credentials** - Get from [Twitter Developer Portal](https://developer.twitter.com/en/portal)
-   - Bearer Token
    - Consumer Key/Secret  
    - Access Token/Secret
 
-## ⚡ Quick Deploy (GitHub Actions)
+## ⚡ Quick Deploy (Recommended)
 
-1. **Fork this repository**
+### 1. Fork this repository
 
-2. **Set repository secrets** (Settings → Secrets and variables → Actions):
-   ```
-   OPENAI_API_KEY=your-openai-key
-   TWITTER_BEARER_TOKEN=your-bearer-token
-   TWITTER_CONSUMER_KEY=your-consumer-key
-   TWITTER_CONSUMER_SECRET=your-consumer-secret
-   TWITTER_ACCESS_TOKEN=your-access-token
-   TWITTER_ACCESS_TOKEN_SECRET=your-access-token-secret
-   ```
+Click "Fork" in the top-right corner to create your own copy.
 
-3. **Enable GitHub Actions** (Actions tab → Enable workflows)
+### 2. Configure Repository Secrets
 
-4. **Trigger first run** (Actions → EtymoBot Posting → Run workflow)
-
-**Done!** Your bot will now post 3 times daily at optimal hours.
-
-## 🐳 Docker Deploy
+Go to your fork's Settings → Secrets and variables → Actions, and add:
 
 ```bash
-# Clone and setup
-git clone your-fork-url
+TWITTER_CONSUMER_KEY=your-consumer-key
+TWITTER_CONSUMER_SECRET=your-consumer-secret
+TWITTER_ACCESS_TOKEN=your-access-token
+TWITTER_ACCESS_TOKEN_SECRET=your-access-token-secret
+```
+
+### 3. Enable GitHub Actions
+
+1. Go to the "Actions" tab in your fork
+2. Click "I understand my workflows, go ahead and enable them"
+
+### 4. Initial Setup
+
+1. Go to Actions → "Weekly Corpus Refresh" → "Run workflow" 
+2. Wait 10-15 minutes for the etymology corpus to build
+3. Your bot will automatically start posting 3x daily!
+
+**That's it!** Your bot is now fully automated and will:
+- 🔄 Refresh etymology data weekly
+- 📱 Post tweets 3x daily at optimal times
+- 📊 Track all posted pairs automatically
+
+## 💻 Local Testing (Optional)
+
+Want to test locally before deploying? Here's how:
+
+### Setup
+
+```bash
+# Clone your fork
+git clone https://github.com/YOUR-USERNAME/etymological.git
 cd etymological
-cp env.example .env
-# Edit .env with your API keys
 
-# Build initial cache
-docker-compose --profile init up etymobot-cache-builder
+# Install dependencies  
+pip install tweepy
 
-# Start bot
-docker-compose up etymobot
+# Download Wiktionary dump (2.2GB)
+curl -o data/wiktionary-data.jsonl.gz https://kaikki.org/dictionary/English/kaikki.org-dictionary-English.jsonl.gz
 ```
 
-## 💻 Local Setup
-
-### Option 1: Using the Package (Recommended)
+### Test Commands
 
 ```bash
-# Install dependencies and package
-pip install -r requirements.txt
-pip install -e .
+# Build etymology corpus (takes 5-10 minutes)
+python scripts/build_roots.py
 
-# Set environment variables
-export OPENAI_API_KEY="your-key"
-export TWITTER_BEARER_TOKEN="your-token"
-# ... set all required vars
+# Test tweet generation (safe - no posting)
+python scripts/post.py --dry-run
 
-# Build cache (takes 10-15 minutes)
-etymobot --build-cache
-
-# Test single tweet
-etymobot --mode single
-
-# Start scheduled posting
-etymobot --mode scheduled
+# Check corpus statistics
+python scripts/build_roots.py --max-entries 1000  # Smaller test corpus
 ```
 
-### Option 2: Using the Main Script
+## 🛠️ Advanced Configuration
 
-```bash
-# Install dependencies
-pip install -r requirements.txt
+### Custom Posting Schedule
 
-# Set environment variables
-export OPENAI_API_KEY="your-key"
-export TWITTER_BEARER_TOKEN="your-token"
-# ... set all required vars
-
-# Build cache (takes 10-15 minutes)
-python main.py --build-cache
-
-# Test single tweet
-python main.py --mode single
-
-# Start scheduled posting
-python main.py --mode scheduled
+Edit `.github/workflows/post-tweets.yml` line 6:
+```yaml
+- cron: '0 13,17,19 * * *'  # 9AM, 1PM, 3PM EST
 ```
 
-## 🛠️ Advanced Usage
+Change to your preferred times (in UTC).
 
-### Statistics and Monitoring
+### Monitoring Your Bot
 
-```bash
-# Show bot statistics
-etymobot --stats
+- **Actions tab**: See workflow run history
+- **Data folder**: Check `posted.csv` for tweet history  
+- **Corpus stats**: View etymology data in `roots.json.gz`
 
-# Dry run (generate tweet without posting)
-etymobot --dry-run
+### Troubleshooting
 
-# Verbose logging
-etymobot --verbose --mode single
+**No tweets posting?**
+- Check if secrets are set correctly
+- Verify workflows are enabled
+- Ensure corpus build completed successfully
 
-# Custom database location
-etymobot --db /path/to/custom.sqlite --stats
-```
-
-### Development
-
-```bash
-# Install development dependencies
-pip install -e ".[dev]"
-
-# Run tests
-pytest
-
-# Code formatting
-black src/ tests/
-
-# Type checking
-mypy src/
-```
+**Workflow failures?**
+- Check Actions tab for error logs
+- Verify Twitter API credentials
+- Check if rate limits were hit
 
 ## 📋 What Happens Next
 
-- **Cache Building**: Bot discovers 1000+ word-root mappings
-- **Smart Posting**: Posts only during peak hours (9 AM, 1 PM, 3 PM EST)
-- **Content Quality**: AI generates engaging tweets about word pairs using 5 different stylistic templates
-- **Stylistic Variation**: Randomly rotates between Statement+Twist, Question Hook, Mini Anecdote, Fragment+Aside, and One-Liner Aphorism formats
-- **Self-Improvement**: Skips problematic words, tracks what's been posted
+Once set up, your bot will:
 
-## 🔧 Troubleshooting
+- **📚 Build Corpus**: Extract 3,000+ etymological roots from Wiktionary
+- **🎯 Smart Selection**: Choose unposted word pairs with authentic connections
+- **📝 Generate Tweets**: Create engaging content using curated templates
+- **⏰ Optimal Timing**: Post 3x daily during peak engagement hours
+- **📊 Track History**: Avoid repeating pairs and maintain quality
 
-**Missing credentials**: Verify all API keys are set correctly
-**No tweets**: Check if current time is optimal (9/13/15 EST)  
-**Cache empty**: Run `--build-cache` first
-**Rate limits**: Built-in handling, just wait
-**Import errors**: Make sure to install with `pip install -e .`
+## 📖 Example Bot Output
 
-## 📖 Example Tweet
+> gustable/gusty: "gustus" splits into gustable vs gusty.
 
-> Sporadic and diaspora sprout from Greek speirein, to sow. One names lonely seeds scattered by wind, the other a people scattered by history. Every grain carries a map of home.
+> weary/worse: "wer" branches into weary vs worse.
+
+> carriage/cargo: "carrus" evolved into carriage vs cargo.
 
 ## 🏗️ Project Structure
 
 ```
 etymological/
-├── src/etymobot/           # Main package
-│   ├── bot.py             # Core bot logic
-│   ├── config.py          # Configuration
-│   ├── database.py        # Database operations
-│   ├── etymology.py       # Etymology discovery
-│   ├── services.py        # External APIs
-│   └── cli.py            # Command-line interface
-├── tests/                  # Test suite
-├── main.py                # Entry point script
-├── pyproject.toml         # Package configuration
-└── requirements.txt       # Dependencies
+├── scripts/
+│   ├── build_roots.py      # Extract etymology corpus from Wiktionary
+│   └── post.py            # Generate and post tweets
+├── data/
+│   ├── roots.json.gz      # Etymology corpus (auto-generated)
+│   └── posted.csv         # Tweet history (auto-updated)
+└── .github/workflows/
+    ├── roots-refresh.yml  # Weekly corpus refresh
+    └── post-tweets.yml    # 3x daily posting
 ```
+
+## 🚀 Next Steps
+
+- **Customize**: Edit templates in `scripts/post.py`
+- **Monitor**: Watch your bot's performance in the Actions tab
+- **Scale**: The system handles 10,000+ word relationships automatically
+- **Improve**: Submit issues or PRs to enhance the bot
+
+Your EtymoBot is now live and will continue running automatically! 🎉
 
