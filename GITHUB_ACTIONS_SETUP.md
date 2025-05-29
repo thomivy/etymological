@@ -1,5 +1,7 @@
 # 🤖 GitHub Actions Setup Guide
 
+> 🔒 **Security Note**: Before setting up secrets, review our [Security Best Practices Guide](SECURITY.md) for comprehensive credential management recommendations.
+
 ## Overview
 
 EtymoBot is now configured with two GitHub Actions workflows:
