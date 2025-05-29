@@ -85,7 +85,7 @@ class GenerativeEtymologyGenerator:
                 # Step 2: Web search verification
                 verification = self._web_verify_etymology(word1, word2, root, reasoning)
                 
-                if verification and verification.confidence >= 0.8:
+                if verification and verification.confidence >= 0.85:
                     logger.info(f"✅ VERIFIED: {word1} + {word2} (confidence: {verification.confidence:.2f})")
                     return verification
                 else:
@@ -168,7 +168,7 @@ Return JSON format: {"word1": "word", "word2": "word", "root": "*root", "reasoni
         # Step 2: AI analysis of evidence
         confidence = self._ai_analyze_evidence(word1, word2, root, reasoning, evidence)
         
-        if confidence >= 0.8:
+        if confidence >= 0.85:
             return VerifiedEtymology(
                 word1=word1,
                 word2=word2,
@@ -253,16 +253,24 @@ Return JSON format: {"word1": "word", "word2": "word", "root": "*root", "reasoni
 
 Rate the confidence (0.0-1.0) that the two words genuinely share the given etymological root.
 
+CRITICAL: Be very strict about false etymologies. Many similar-sounding words have completely different origins.
+
 STANDARDS:
-- 0.9-1.0: Strong web evidence confirms the connection
-- 0.8-0.9: Good evidence supports the connection
-- 0.6-0.8: Some evidence but uncertain
-- 0.4-0.6: Weak or conflicting evidence
-- 0.0-0.4: No evidence or evidence contradicts
+- 0.9-1.0: Strong web evidence clearly confirms the shared root with detailed historical path
+- 0.8-0.9: Good evidence supports connection with clear etymological reasoning  
+- 0.6-0.8: Some evidence but missing key details or conflicting information
+- 0.4-0.6: Weak evidence, unclear connection, or suspected false etymology
+- 0.0-0.4: No evidence, contradictory evidence, or clearly false etymology
+
+RED FLAGS (automatically score ≤0.4):
+- Similar spelling but different language families
+- One word clearly has different origin (e.g. Germanic vs Latin vs Greek)
+- Suspicious word pairs that sound alike but lack etymological connection
+- Missing clear historical development path from root to modern words
 
 Consider BOTH:
-1. Factual accuracy (do they really share this root?)
-2. Interestingness (would this surprise educated readers?)
+1. Factual accuracy (do they really share this root? Are the historical paths clear?)
+2. Evidence quality (does web evidence specifically support this connection?)
 
 RESPOND with ONLY a decimal number 0.0-1.0."""
                     },
