@@ -50,28 +50,28 @@ class TwitterPoster:
         # Tweet templates for variety (hand-crafted micro-templates)
         self.templates = [
             # Statement + Twist style
-            '"{word1}" and "{word2}" both trace to "{root}." {reflection}',
+            '"{word1}" and "{word2}" both trace to "{root}"{gloss_part}. {reflection}',
             
             # Question Hook style
-            'Ever wondered why "{word1}" and "{word2}" share the root "{root}"? {insight}',
+            'Ever wondered why "{word1}" and "{word2}" share the root "{root}"{gloss_part}? {insight}',
             
             # Mini Anecdote style
-            'In ancient times, "{root}" gave birth to both "{word1}" and "{word2}." {contrast}',
+            'In ancient times, "{root}"{gloss_part} gave birth to both "{word1}" and "{word2}." {contrast}',
             
             # Fragment & Aside style
-            '{word1} & {word2}—both from "{root}." {metaphor}',
+            '{word1} & {word2}—both from "{root}"{gloss_part}. {metaphor}',
             
             # One-Liner Aphorism style
-            '{word1}/{word2}: "{root}" splits into {description}.',
+            '{word1}/{word2}: "{root}"{gloss_part} splits into {description}.',
             
             # Simple declarative
-            '"{word1}" and "{word2}" share the ancient root "{root}."',
+            '"{word1}" and "{word2}" share the ancient root "{root}"{gloss_part}.',
             
             # Poetic form
-            'From "{root}" spring both "{word1}" and "{word2}"—{observation}.',
+            'From "{root}"{gloss_part} spring both "{word1}" and "{word2}"—{observation}.',
             
             # Discovery form
-            'Etymology reveals: "{word1}" + "{word2}" = "{root}" lineage.',
+            'Etymology reveals: "{word1}" + "{word2}" = "{root}"{gloss_part} lineage.',
         ]
         
         # Reflection phrases for variety
@@ -146,13 +146,13 @@ class TwitterPoster:
             logger.error(f"Twitter initialization failed: {e}")
             raise
     
-    def generate_tweet(self, word1: str, word2: str, root: str) -> str:
+    def generate_tweet(self, word1: str, word2: str, root: str, gloss: Optional[str] = None) -> str:
         """Generate a tweet for the given word pair and root.
 
         Priority: OpenAI generation (if enabled) → template fallback."""
 
         if self.use_ai:
-            tweet_ai = self._generate_tweet_ai(word1, word2, root)
+            tweet_ai = self._generate_tweet_ai(word1, word2, root, gloss)
             if tweet_ai:
                 return tweet_ai
 
@@ -169,7 +169,8 @@ class TwitterPoster:
             'contrast': random.choice(self.contrasts),
             'metaphor': random.choice(self.metaphors),
             'observation': random.choice(self.contrasts),
-            'description': f"{word1.split()[0]} vs {word2.split()[0]}"
+            'description': f"{word1.split()[0]} vs {word2.split()[0]}",
+            'gloss_part': f" ({gloss})" if gloss else ""
         }
         
         try:
@@ -178,15 +179,16 @@ class TwitterPoster:
             # Ensure tweet is within Twitter's character limit
             if len(tweet) > 280:
                 # Fall back to simpler template
-                simple_template = '"{word1}" and "{word2}" share the ancient root "{root}."'
-                tweet = simple_template.format(word1=word1, word2=word2, root=root)
+                simple_template = '"{word1}" and "{word2}" share the ancient root "{root}"{gloss_part}.'
+                tweet = simple_template.format(word1=word1, word2=word2, root=root, gloss_part=variables['gloss_part'])
             
             return tweet
             
         except KeyError as e:
             logger.warning(f"Template formatting error: {e}, using fallback")
             # Fallback template
-            return f'"{word1}" and "{word2}" share the ancient root "{root}."'
+            gloss_part = f" ({gloss})" if gloss else ""
+            return f'"{word1}" and "{word2}" share the ancient root "{root}"{gloss_part}.'
     
     def post_tweet(self, tweet_text: str) -> Optional[str]:
         """Post tweet to Twitter and return tweet ID."""
@@ -207,7 +209,7 @@ class TwitterPoster:
     # ------------------------------------------------------------------
     # OpenAI helper
     # ------------------------------------------------------------------
-    def _generate_tweet_ai(self, word1: str, word2: str, root: str) -> Optional[str]:
+    def _generate_tweet_ai(self, word1: str, word2: str, root: str, gloss: Optional[str] = None) -> Optional[str]:
         """Call OpenAI to craft a tweet following the specified template.
 
         Returns None on failure so caller can fallback to template."""
@@ -220,34 +222,54 @@ class TwitterPoster:
             from openai import OpenAI
             client = OpenAI(api_key=openai.api_key)
             
-            prompt = (
-                "Compose a single tweet no longer than 280 characters that follows this template:\n\n"
-                f"{word1} · {word2} — *{root}* (\"<root-gloss>\"). <One-sentence narrative showing how the two words diverged, including a vivid, concrete image>. <One-sentence reflection or question that invites the reader to ponder language or life.>\n\n"
-                "Instructions\n"
-                "1. Replace <root-gloss> with a terse English gloss for the root.\n"
-                "2. Use lively but accessible diction—no emojis, no hashtags, no academic jargon.\n"
-                "3. Keep everything under 280 characters total.\n"
-                "4. Prefer strong verbs and sensory nouns; avoid unnecessary adverbs.\n"
-                "5. Do not repeat any pair posted previously (the calling code enforces this, but refrain anyway)."
-            )
-
+            # Use a default gloss if none provided
+            gloss = gloss or "meaning unknown"
+            
             messages = [
-                {"role": "system", "content": "You are a creative etymology tweeting assistant."},
-                {"role": "user", "content": prompt},
+                {
+                    "role": "system",
+                    "content": """ROLE: EtymoWriter
+
+Mission
+Craft a single tweet (≤ 280 characters) that uncovers the shared ancestry of two English words and shows how their meanings drifted. Write with Lydia Davis's compression, Tolkien's root-reverence, Nabokov's sly pivots, and McPhee's concrete imagery.
+
+Core Requirements
+• Include the two words, their root-ID, and a brief gloss in parentheses.
+• Present-tense narration, maximum one em-dash, no semicolons.  
+• Structure is flexible—no mandatory header line—as long as the information flows in literary prose.  
+• If the supplied words do not share the given root-ID, output ABORT.
+
+Few-Shot Inspirations
+gregarious and egregious share *GREX* ("herd"). One mingles with the flock, the other stands apart—language keeps score of our quiet expulsions.
+sacrifice meets sacred under *SACR* ("holy"). Holiness is purchased with loss; the offered thing becomes precious by vanishing.
+write walks beside rite through *WREH₁* ("carve"). Clay tablets became covenants; every signature still cuts into the world a little.
+enemy and amicable grow from *AMAC* ("friend"). An un-friend is intimacy inverted; hatred remembers the shape of what it once embraced.
+sporadic and diaspora sowed from *SPEI* ("scatter seed"). Seeds drift, nations wander—the earth keeps count of every exile.
+ostracize hides pottery shards inside itself, a reminder that democracy once voted with broken clay.
+precarious carries a prayer: when footing slips, the lips petition.
+rodent and erode gnaw at their objects—one with teeth, one with time.
+caprice cavorts with capricious on goatish legs, mischief in every leap.
+sabotage began with a wooden shoe, a protest stomp that still echoes in the gears."""
+                },
+                {
+                    "role": "user",
+                    "content": f"{word1} and {word2} share *{root}* (\"{gloss}\"). Write one tweet that reveals their divergence and reflects poetically on the drift in meaning. Output only the tweet or ABORT."
+                }
             ]
 
             response = client.chat.completions.create(
-                model="gpt-3.5-turbo",
+                model="gpt-4o",
                 messages=messages,
                 temperature=0.7,
-                max_tokens=128,
+                max_tokens=160,
             )
 
             content = response.choices[0].message.content.strip()
 
-            # Final sanity check
-            if len(content) > 280:
-                content = content[:279]
+            # Validate response
+            if len(content) > 280 or "ABORT" in content.upper():
+                logger.warning(f"OpenAI response invalid: {len(content)} chars or ABORT detected")
+                return None  # fallback to templates
 
             return content
 
@@ -409,7 +431,7 @@ def main():
         root, word1, word2, gloss = pair_result
         
         # Generate tweet
-        tweet_text = poster.generate_tweet(word1, word2, root)
+        tweet_text = poster.generate_tweet(word1, word2, root, gloss)
         logger.info(f"Generated tweet: {tweet_text}")
         
         # Post tweet
