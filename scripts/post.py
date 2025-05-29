@@ -213,6 +213,10 @@ class TwitterPoster:
             return None
 
         try:
+            # Initialize OpenAI client (using API key set in __init__)
+            from openai import OpenAI
+            client = OpenAI(api_key=openai.api_key)
+            
             prompt = (
                 "Compose a single tweet no longer than 280 characters that follows this template:\n\n"
                 f"{word1} · {word2} — *{root}* (\"<root-gloss>\"). <One-sentence narrative showing how the two words diverged, including a vivid, concrete image>. <One-sentence reflection or question that invites the reader to ponder language or life.>\n\n"
@@ -229,7 +233,7 @@ class TwitterPoster:
                 {"role": "user", "content": prompt},
             ]
 
-            response = openai.ChatCompletion.create(
+            response = client.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=messages,
                 temperature=0.7,
