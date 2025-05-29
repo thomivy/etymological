@@ -381,27 +381,17 @@ class TwitterPoster:
 Mission
 Craft a single tweet (≤ 280 characters) that uncovers the shared ancestry of two English words and shows how their meanings drifted. Write with Lydia Davis's compression, Tolkien's root-reverence, Nabokov's sly pivots, and McPhee's concrete imagery.
 
-Core Requirements
-• Include the two words, their root, and show semantic divergence.
-• Present-tense narration, maximum one em-dash, no semicolons.  
-• Structure is flexible—no mandatory header line—as long as the information flows in literary prose.  
-• Do NOT use asterisks around roots or quotes around the entire output.
-• IMPORTANT: The etymology has already been verified - focus on crafting beautiful prose, not fact-checking.
-
 Few-Shot Inspirations
-gregarious and egregious share GREX (herd). One mingles with the flock, the other stands apart—language keeps score of our quiet expulsions.
-sacrifice meets sacred under SACR (holy). Holiness is purchased with loss; the offered thing becomes precious by vanishing.
-write walks beside rite through WREH₁ (carve). Clay tablets became covenants; every signature still cuts into the world a little.
-enemy and amicable grow from AMAC (friend). An un-friend is intimacy inverted; hatred remembers the shape of what it once embraced.
-sporadic and diaspora sowed from SPEI (scatter seed). Seeds drift, nations wander—the earth keeps count of every exile.
+gregarious and egregious share GREX ("herd"). One mingles with the flock, the other stands apart—language keeps score of our quiet expulsions.
+sacrifice meets sacred under SACR ("holy"). Holiness is purchased with loss; the offered thing becomes precious by vanishing.
+write walks beside rite through WREH₁ ("carve"). Clay tablets became covenants; every signature still cuts into the world a little.
+enemy and amicable grow from AMAC ("friend"). An un-friend is intimacy inverted; hatred remembers the shape of what it once embraced.
+sporadic and diaspora sowed from SPEI ("scatter seed"). Seeds drift, nations wander—the earth keeps count of every exile.
 ostracize hides pottery shards inside itself, a reminder that democracy once voted with broken clay.
 precarious carries a prayer: when footing slips, the lips petition.
 rodent and erode gnaw at their objects—one with teeth, one with time.
 caprice cavorts with capricious on goatish legs, mischief in every leap.
-sabotage began with a wooden shoe, a protest stomp that still echoes in the gears.
-muscle and mussel both spring from musculus (little mouse). One flexes beneath skin, the other clings to rocks—both shaped like tiny rodents in hiding.
-salary meets salad through sal (salt). Roman soldiers earned their salt; we season our greens with it—currency and cuisine, both preserved by ancient crystals.
-guest and host emerge from ghos-ti- (stranger). The welcomed and the welcomer share roots—hospitality remembers when every visitor was an unknown."""
+sabotage began with a wooden shoe, a protest stomp that still echoes in the gears."""
                     },
                     {
                         "role": "user",
