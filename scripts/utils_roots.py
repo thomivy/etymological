@@ -23,6 +23,7 @@ def canonical_id(raw_root: str) -> Optional[str]:
         "PIE *bhel-" -> "BHEL"
         "ghen" -> "GHEN"
         "car" -> None (too short, likely morphological)
+        "*habjan-" -> "HABJAN" (handles ablaut variants)
     """
     if not raw_root or not isinstance(raw_root, str):
         return None
@@ -70,6 +71,44 @@ def canonical_id(raw_root: str) -> Optional[str]:
     
     # Convert to uppercase (Leiden convention)
     root = root.upper()
+    
+    # ABLAUT AND ORTHOGRAPHIC NORMALIZATION
+    # Handle common Germanic/PIE ablaut patterns and variants
+    
+    # Gemination variants (habjan/habbjan, etc.)
+    root = re.sub(r'([BCDFGHJKLMNPQRSTVWXYZ])\1+', r'\1', root)  # Remove gemination
+    
+    # Ablaut grade normalization - map to canonical form
+    ablaut_mappings = {
+        # Germanic *habjan- family (have/hover/heave)
+        r'HAB[BJ]*AN': 'HABJAN',
+        r'HAF[FT]*AN': 'HABJAN',  # haft variant
+        r'HEB[BJ]*AN': 'HABJAN',  # hebban variant
+        
+        # PIE *wer- family (various grades)
+        r'WER[HDNT]*': 'WER',
+        r'WOR[HDNT]*': 'WER', 
+        r'WUR[HDNT]*': 'WER',
+        
+        # PIE *bhel- family (blow/belly)
+        r'BHEL[HJLW]*': 'BHEL',
+        r'BHOL[HJLW]*': 'BHEL',
+        r'BHUL[HJLW]*': 'BHEL',
+        
+        # PIE *dʰeh₁- family (do/deed)
+        r'DHE[HJ]*': 'DHE',
+        r'DHO[HJ]*': 'DHE',
+        r'DHA[HJ]*': 'DHE',
+        
+        # Common Germanic patterns
+        r'([BCDFGHJKLMNPQRSTVWXYZ]+)IAN': r'\1JAN',  # -ian -> -jan
+        r'([BCDFGHJKLMNPQRSTVWXYZ]+)IJ': r'\1J',     # -ij -> -j
+    }
+    
+    # Apply ablaut normalizations
+    original_root = root
+    for pattern, replacement in ablaut_mappings.items():
+        root = re.sub(pattern, replacement, root)
     
     # Remove all hyphens for canonical form (but keep numbered suffix)
     root = root.replace('-', '')

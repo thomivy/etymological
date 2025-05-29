@@ -15,6 +15,50 @@ sys.path.insert(0, Path(__file__).parent)
 from utils_roots import looks_like_trivial_affix
 
 
+def test_ablaut_unification(roots_file: str):
+    """Test that ablaut variants are properly unified."""
+    print(f"🔄 Testing ablaut unification in {roots_file}")
+    
+    try:
+        with gzip.open(roots_file, 'rt', encoding='utf-8') as f:
+            roots = json.load(f)
+    except Exception as e:
+        print(f"❌ Failed to load roots: {e}")
+        return
+    
+    # Test HABJAN family unification
+    habjan = roots.get('HABJAN', {})
+    if habjan:
+        words = habjan.get('words', [])
+        sources = habjan.get('sources', 0)
+        
+        print(f"✅ HABJAN family found:")
+        print(f"  Words: {words}")
+        print(f"  Sources: {sources}")
+        
+        # Check specific cognates
+        key_words = ['have', 'hover', 'heave']
+        found_words = [w for w in key_words if w in words]
+        
+        print(f"  Key cognates found: {found_words}")
+        
+        if 'have' in words and 'hover' in words:
+            print(f"🎉 SUCCESS: have + hover can now be paired!")
+        else:
+            print(f"❌ ISSUE: have/hover not in same family")
+    else:
+        print("❌ HABJAN family not found")
+    
+    # Check for over-splitting
+    habjan_variants = [k for k in roots.keys() if 'hab' in k.lower() and 'jan' in k.lower()]
+    print(f"\n📊 HABJAN-related roots: {habjan_variants}")
+    
+    if len(habjan_variants) == 1:
+        print("✅ No over-splitting detected")
+    else:
+        print(f"⚠️  Multiple HABJAN variants still exist: {habjan_variants}")
+
+
 def test_pairing_quality(roots_file: str):
     """Test pairing quality with new system."""
     print(f"🧪 Testing pairing quality from {roots_file}")
@@ -90,8 +134,8 @@ def test_pairing_quality(roots_file: str):
 
 def compare_old_vs_new():
     """Compare old vs new roots if both exist."""
-    old_file = "data/roots.json.gz"
-    new_file = "data/roots_new.json.gz"
+    old_file = "data/roots_backup.json.gz"
+    new_file = "data/roots.json.gz"
     
     if not Path(old_file).exists() or not Path(new_file).exists():
         print("⚠️  Cannot compare - missing old or new roots file")
@@ -121,13 +165,17 @@ def compare_old_vs_new():
     
     print(f"  📊 Old system: {len(old_roots):,} roots, {old_pairs:,} pairs")
     print(f"  📊 New system: {len(new_roots):,} roots, {new_pairs:,} pairs")
-    print(f"  📉 Reduction: {(1 - len(new_roots)/len(old_roots))*100:.1f}% fewer roots")
-    print(f"  📉 Reduction: {(1 - new_pairs/old_pairs)*100:.1f}% fewer pairs")
+    print(f"  📈 Change: {(len(new_roots)/len(old_roots)-1)*100:+.1f}% roots, {(new_pairs/old_pairs-1)*100:+.1f}% pairs")
 
 
 if __name__ == "__main__":
+    # Test ablaut unification
+    test_ablaut_unification("data/roots.json.gz")
+    
+    print("\n" + "="*60 + "\n")
+    
     # Test new system
-    test_pairing_quality("data/roots_new.json.gz")
+    test_pairing_quality("data/roots.json.gz")
     
     # Compare if both exist
     compare_old_vs_new()
