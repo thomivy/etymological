@@ -735,15 +735,32 @@ def main():
     approach_name = "GENERATIVE" if use_generative else "RAG"
     logger.info(f"Using {approach_name} approach for etymology generation")
     
+    # Debug API key availability
+    api_key = os.getenv('OPENAI_API_KEY')
+    if api_key:
+        logger.info(f"✅ OpenAI API key found (length: {len(api_key)} characters)")
+    else:
+        logger.warning("❌ OpenAI API key not found in environment")
+        # List available environment variables that might be related
+        openai_vars = [var for var in os.environ.keys() if 'OPENAI' in var.upper()]
+        if openai_vars:
+            logger.info(f"🔍 Found OpenAI-related env vars: {openai_vars}")
+        else:
+            logger.info("🔍 No OpenAI-related environment variables found")
+    
     try:
         # Initialize Twitter poster
         poster = TwitterPoster(dry_run=args.dry_run)
         
         # Check if OpenAI API key is available for generative approach
-        api_key = os.getenv('OPENAI_API_KEY')
         if use_generative and not api_key:
-            logger.warning("OPENAI_API_KEY not set, falling back to RAG approach")
+            logger.warning("🔄 OPENAI_API_KEY not set, falling back to RAG approach")
             use_generative = False
+        elif use_generative and not OpenAI:
+            logger.warning("🔄 OpenAI package not available, falling back to RAG approach")
+            use_generative = False
+        elif use_generative:
+            logger.info(f"🤖 Generative approach confirmed - using OpenAI API with key ending in: ...{api_key[-4:]}")
         
         # Generate etymology using selected approach
         if use_generative:
