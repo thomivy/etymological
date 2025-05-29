@@ -358,7 +358,7 @@ class TwitterPoster:
         
         if not self.use_ai:
             # Simple fallback if AI not available
-            return f'"{word1}" and "{word2}" share the ancient root "{root}". Words wander but roots remain.'
+            return f'{word1} and {word2} share the ancient root {root}. Words wander but roots remain.'
         
         try:
             client = OpenAI(api_key=openai.api_key)
@@ -379,19 +379,21 @@ REQUIREMENTS:
 • Show semantic evolution/divergence
 • Present tense, literary prose
 • Maximum one em-dash, no semicolons
+• Do NOT use asterisks around root words
+• Do NOT wrap the output in quotes
 • If the etymology seems incorrect, output: ABORT
 
 EXAMPLES:
-"muscle and mussel both spring from *musculus* (little mouse). One flexes beneath skin, the other clings to rocks—both shaped like tiny rodents in hiding."
+muscle and mussel both spring from musculus (little mouse). One flexes beneath skin, the other clings to rocks—both shaped like tiny rodents in hiding.
 
-"salary meets salad through *sal* (salt). Roman soldiers earned their salt; we season our greens with it—currency and cuisine, both preserved by ancient crystals."
+salary meets salad through sal (salt). Roman soldiers earned their salt; we season our greens with it—currency and cuisine, both preserved by ancient crystals.
 
-"guest and host emerge from *ghos-ti-* (stranger). The welcomed and the welcomer share roots—hospitality remembers when every visitor was an unknown."
+guest and host emerge from ghos-ti- (stranger). The welcomed and the welcomer share roots—hospitality remembers when every visitor was an unknown.
 """
                     },
                     {
                         "role": "user",
-                        "content": f"Write a tweet about how {word1} and {word2} share the root *{root}*. Show their divergent meanings. Output only the tweet or ABORT."
+                        "content": f"Write a tweet about how {word1} and {word2} share the root {root}. Show their divergent meanings. Output only the tweet or ABORT."
                     }
                 ],
                 temperature=0.7,
