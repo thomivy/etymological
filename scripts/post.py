@@ -160,6 +160,7 @@ Return JSON: {"word1": "word", "word2": "word", "root": "*root", "reasoning": "b
         # Known false etymology patterns to block
         false_patterns = {
             ("southpaw", "sinister"): "southpaw is modern American boxing slang, not from Latin",
+            ("salary", "salad"): "salary from Latin salarium (soldier's pay), salad from Vulgar Latin salata - no connection",
             ("radar", "radio"): "radar is WWII acronym, not etymologically related to radio",
             ("scuba", "submarine"): "scuba is modern acronym, not classical etymology",
             ("computer", "compute"): "too obvious/modern to be interesting",
@@ -218,7 +219,6 @@ Return JSON: {"word1": "word", "word2": "word", "root": "*root", "reasoning": "b
         """
         # Known high-quality etymology pairs for demonstration
         known_good = {
-            ("salary", "salad"): "Multiple sources confirm both derive from Latin 'sal' (salt)",
             ("muscle", "mussel"): "Both from Latin 'musculus' meaning little mouse", 
             ("travel", "travail"): "Both connected to Latin 'tripalium' (three stakes)",
             ("guest", "host"): "Both from PIE *ghos-ti- meaning stranger/guest",
@@ -226,9 +226,21 @@ Return JSON: {"word1": "word", "word2": "word", "root": "*root", "reasoning": "b
             ("peculiar", "pecuniary"): "Both from Latin 'pecus' meaning cattle/livestock",
         }
         
+        # Known false etymologies to reject
+        known_false = {
+            ("salary", "salad"): "No credible sources support this connection - salary from Latin salarium (soldier's pay), salad from Vulgar Latin salata",
+            ("sinister", "southpaw"): "Southpaw is modern American boxing slang, not from Latin sinister",
+        }
+        
         pair_key = tuple(sorted([word1.lower(), word2.lower()]))
         
+        # Check known good pairs
         for known_pair, evidence in known_good.items():
+            if set(pair_key) == set(known_pair):
+                return evidence
+        
+        # Check known false pairs  
+        for known_pair, evidence in known_false.items():
             if set(pair_key) == set(known_pair):
                 return evidence
         
@@ -251,11 +263,16 @@ Return JSON: {"word1": "word", "word2": "word", "root": "*root", "reasoning": "b
                         "role": "system",
                         "content": """You are a rigorous etymological fact-checker. Evaluate if the etymology claim is actually supported.
 
+CRITICAL: Use the SAME standards as the EtymoWriter system. If EtymoWriter would ABORT this etymology, rate it low.
+
 Be EXTREMELY STRICT. Only return high confidence if:
-- The connection is well-documented in scholarly sources
+- The connection is well-documented in scholarly sources  
 - Multiple authoritative references support it
 - The etymological path is clear and traceable
+- Both words genuinely derive from the stated root
 - You would stake your professional reputation on this
+
+Rate salary+salad from *sal as LOW confidence - this is a known false etymology.
 
 Return only a confidence score from 0.0 to 1.0"""
                     },
@@ -322,16 +339,16 @@ class TwitterPoster:
             '{word1} & {word2}—both from "{root}"{gloss_part}. {metaphor}',
             
             # One-Liner Aphorism style
-            '{word1}/{word2}: "{root}"{gloss_part} splits into {description}.',
+            '{word1}/{word2}: "{root}"{gloss_part} splits into {description}',
             
             # Simple declarative
-            '"{word1}" and "{word2}" share the ancient root "{root}"{gloss_part}.',
+            '"{word1}" and "{word2}" share the ancient root "{root}"{gloss_part}',
             
             # Poetic form
-            'From "{root}"{gloss_part} spring both "{word1}" and "{word2}"—{observation}.',
+            'From "{root}"{gloss_part} spring both "{word1}" and "{word2}"—{observation}',
             
             # Discovery form
-            'Etymology reveals: "{word1}" + "{word2}" = "{root}"{gloss_part} lineage.',
+            'Etymology reveals: "{word1}" + "{word2}" = "{root}"{gloss_part} lineage',
         ]
         
         # Reflection phrases for variety
