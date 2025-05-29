@@ -135,11 +135,8 @@ Root: {pair.root}"""
                 prompt = template_func(pair)
 
                 logger.debug(
-                    f"Using template: {
-                        template_func.__name__} for {
-                        pair.word1}/{
-                        pair.word2} (attempt {
-                        attempt + 1})")
+                    f"Using template: {template_func.__name__} for "
+                    f"{pair.word1}/{pair.word2} (attempt {attempt + 1})")
 
                 response = self.client.chat.completions.create(
                     model=self.config.openai_model,
@@ -166,15 +163,13 @@ Root: {pair.root}"""
                     return tweet_content
 
                 logger.warning(
-                    f"Generated tweet too long ({
-                        len(tweet_content)} chars), trying fallback...")
+                    f"Generated tweet too long ({len(tweet_content)} chars), trying fallback...")
 
                 # Fallback to a simple, short template
-                fallback_prompt = f"""Write a concise tweet under {
-                    self.config.max_tweet_length} characters about how {
-                    pair.word1} and {
-                    pair.word2} share the root '{
-                    pair.root}' but have different meanings. Be engaging and poetic but brief. No emojis or hashtags."""
+                fallback_prompt = (f"Write a concise tweet under {self.config.max_tweet_length} "
+                                   f"characters about how {pair.word1} and {pair.word2} share the root "
+                                   f"'{pair.root}' but have different meanings. Be engaging and poetic "
+                                   "but brief. No emojis or hashtags.")
 
                 fallback_response = self.client.chat.completions.create(
                     model=self.config.openai_model,
@@ -191,14 +186,13 @@ Root: {pair.root}"""
                         return fallback_content
 
                 logger.warning(
-                    f"Fallback also failed, retrying with different template (attempt {
-                        attempt + 1})")
+                    f"Fallback also failed, retrying with different template (attempt "
+                    f"{attempt + 1})")
 
             except openai.RateLimitError as e:
                 wait_time = (2 ** attempt) * 5  # Exponential backoff for rate limits
                 logger.warning(
-                    f"OpenAI rate limit hit (attempt {
-                        attempt + 1}), waiting {wait_time}s: {e}")
+                    f"OpenAI rate limit hit (attempt {attempt + 1}), waiting {wait_time}s: {e}")
                 if attempt < self.config.max_retries:
                     time.sleep(wait_time)
                 continue
@@ -216,10 +210,8 @@ Root: {pair.root}"""
                 continue
 
         logger.error(
-            f"Failed to generate tweet for {
-                pair.word1}/{
-                pair.word2} after {
-                self.config.max_retries + 1} attempts")
+            f"Failed to generate tweet for {pair.word1}/{pair.word2} after "
+            f"{self.config.max_retries + 1} attempts")
         return None
 
     def validate_api_key(self) -> bool:
@@ -289,11 +281,8 @@ class TwitterService:
             except tweepy.TooManyRequests as e:
                 wait_time = (2 ** attempt) * 60  # Exponential backoff in minutes for rate limits
                 logger.warning(
-                    f"Twitter rate limit hit (attempt {
-                        attempt +
-                        1}), waiting {
-                        wait_time /
-                        60:.1f} minutes: {e}")
+                    f"Twitter rate limit hit (attempt {attempt + 1}), waiting "
+                    f"{wait_time / 60:.1f} minutes: {e}")
                 if attempt < self.config.max_retries:
                     time.sleep(wait_time)
                 continue

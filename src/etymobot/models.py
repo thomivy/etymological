@@ -64,11 +64,8 @@ class WordPair:
             raise ValueError("divergence_score must be between 0.0 and 1.0")
 
     def __str__(self) -> str:
-        return f"{
-            self.word1} & {
-            self.word2} (root: {
-            self.root}, divergence: {
-                self.divergence_score:.3f})"
+        return (f"{self.word1} & {self.word2} (root: {self.root}, "
+                f"divergence: {self.divergence_score:.3f})")
 
     @property
     def ordered_pair(self) -> Tuple[str, str]:

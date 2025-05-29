@@ -68,8 +68,8 @@ class EtymologyService:
 
                 if not etymology_text or len(etymology_text) < 50:
                     logger.warning(
-                        f"Insufficient etymology data for '{normalized_word}': {
-                            len(etymology_text) if etymology_text else 0} chars")
+                        f"Insufficient etymology data for '{normalized_word}': "
+                        f"{len(etymology_text) if etymology_text else 0} chars")
                     return None
 
                 # Validate that we actually got etymology content
@@ -81,16 +81,16 @@ class EtymologyService:
 
             except requests.exceptions.Timeout:
                 logger.warning(
-                    f"Timeout fetching etymology for '{normalized_word}' (attempt {
-                        attempt + 1})")
+                    f"Timeout fetching etymology for '{normalized_word}' (attempt "
+                    f"{attempt + 1})")
             except requests.exceptions.RequestException as e:
                 logger.warning(
-                    f"Request failed for '{normalized_word}' (attempt {
-                        attempt + 1}): {e}")
+                    f"Request failed for '{normalized_word}' (attempt "
+                    f"{attempt + 1}): {e}")
             except Exception as e:
                 logger.error(
-                    f"Unexpected error fetching etymology for '{normalized_word}' (attempt {
-                        attempt + 1}): {e}")
+                    f"Unexpected error fetching etymology for '{normalized_word}' (attempt "
+                    f"{attempt + 1}): {e}")
 
             # Exponential backoff before retry
             if attempt < self.config.max_retries:
@@ -100,8 +100,8 @@ class EtymologyService:
 
         # All attempts failed
         logger.error(
-            f"Failed to fetch etymology for '{normalized_word}' after {
-                self.config.max_retries + 1} attempts")
+            f"Failed to fetch etymology for '{normalized_word}' after "
+            f"{self.config.max_retries + 1} attempts")
         self.database.record_word_failure(normalized_word)
         return None
 
