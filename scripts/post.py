@@ -412,27 +412,31 @@ class TwitterPoster:
     def generate_tweet(self, word1: str, word2: str, root: str) -> str:
         """Generate a tweet using AI with enhanced literary style."""
         
+        # Remove leading asterisks from root for cleaner display
+        clean_root = root.lstrip('*')
+        
         if not self.use_ai or not self.openai_client:
             # Simple fallback if AI not available
-            return f'{word1} and {word2} share the ancient root {root}. Words wander but roots remain.'
+            return f'{word1} and {word2} share the ancient root {clean_root}. Words wander but roots remain.'
         
         try:
-            # Shortened, more efficient prompt
+            # Shortened, more efficient prompt with explicit formatting rules
             system_prompt = """Craft a tweet (≤280 chars) revealing shared word ancestry. Style: poetic, insightful, compressed.
 
-Format: "word1 and word2 share ROOT. [poetic reflection on meaning drift]"
+RULES:
+1. Do NOT wrap the tweet in quotation marks.
+2. Do NOT prepend an asterisk to the root (write PECU, not *pecu-).
+3. Begin exactly with: word1 and word2 share ROOT.
+4. Follow with one concise poetic sentence about their divergent meanings.
 
-Examples:
-- "gregarious and egregious share GREX ('herd'). One mingles with the flock, the other stands apart—language keeps score of quiet expulsions."
-- "sacrifice meets sacred under SACR ('holy'). Holiness is purchased with loss; the offered thing becomes precious by vanishing."
-
-Focus on the semantic journey from ancient root to modern meanings."""
+Example:
+rodent and erode share ROD ('gnaw'). One chews with teeth, the other with time—matter yields to jaws and ages alike."""
 
             response = self.openai_client.chat.completions.create(
                 model=self.model,
                 messages=[
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"{word1} and {word2} share {root}. Write one poetic tweet revealing their divergence."}
+                    {"role": "user", "content": f"{word1} and {word2} share {clean_root}. Write one poetic tweet revealing their divergence."}
                 ],
                 temperature=0.7,
                 max_tokens=100  # Reduced for efficiency
@@ -440,8 +444,13 @@ Focus on the semantic journey from ancient root to modern meanings."""
 
             content = response.choices[0].message.content.strip()
 
+            # Post-processing: remove surrounding quotes and any stray asterisks
+            if (content.startswith('"') and content.endswith('"')) or (content.startswith("'") and content.endswith("'")):
+                content = content[1:-1].strip()
+            content = content.replace('*', '')
+
             # Log the actual response for debugging
-            logger.debug(f"OpenAI response for {word1}+{word2} (root: {root}): '{content}'")
+            logger.debug(f"OpenAI response for {word1}+{word2} (root: {clean_root}): '{content}'")
 
             # Validate response
             if not content:
@@ -449,9 +458,10 @@ Focus on the semantic journey from ancient root to modern meanings."""
                 return "ABORT"
             
             if "ABORT" in content.upper():
-                logger.warning(f"OpenAI correctly ABORTed invalid etymology: {word1}+{word2} (root: {root})")
+                logger.warning(f"OpenAI correctly ABORTed invalid etymology: {word1}+{word2} (root: {clean_root})")
                 return "ABORT"
             
+            content = content.strip()
             if len(content) > 280:
                 logger.warning(f"OpenAI response too long: {len(content)} chars, truncating...")
                 # Try to truncate at sentence boundary
@@ -466,9 +476,9 @@ Focus on the semantic journey from ancient root to modern meanings."""
                     logger.warning(f"Even truncated response too long ({len(content)} chars), using template fallback")
                     return "ABORT"
             
-            # Final validation - must contain both words
-            if word1.lower() not in content.lower() or word2.lower() not in content.lower():
-                logger.warning(f"OpenAI response missing required words: {word1}, {word2}")
+            # Final validation - must contain both words and root without asterisk or quotes
+            if any(token.lower() not in content.lower() for token in (word1, word2, clean_root.lower())):
+                logger.warning(f"OpenAI response missing required elements: {word1}, {word2}, {clean_root}")
                 return "ABORT"
 
             return content
@@ -571,7 +581,8 @@ def main():
             logger.warning(f"🎨 Tweet generation had formatting issues for: {word1}+{word2}")
             logger.info("🔄 Using fallback tweet format for verified etymology")
             # Use simple fallback for verified etymologies
-            tweet_text = f'{word1} and {word2} share the ancient root {root}. Words wander but roots remain.'
+            clean_root = root.lstrip('*')
+            tweet_text = f'{word1} and {word2} share the ancient root {clean_root}. Words wander but roots remain.'
         
         logger.info(f"📱 Generated tweet: {tweet_text}")
         
