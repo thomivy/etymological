@@ -1,0 +1,19 @@
+# Core dependencies needed for testing (excludes heavy ML packages)
+requests>=2.32.0
+tweepy>=4.15.0
+openai>=1.80.0
+wordfreq>=3.1.0
+beautifulsoup4>=4.13.0
+pytz>=2025.2
+numpy>=2.1.0
+
+# Test dependencies
+pytest>=8.0.0
+pytest-mock>=3.14.0
+pytest-cov>=4.0.0
+black>=24.0.0
+flake8>=7.0.0
+mypy>=1.16.0
+autopep8>=2.3.0
+types-pytz>=2025.2.0
+types-requests>=2.32.0 

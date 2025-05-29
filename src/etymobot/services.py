@@ -3,10 +3,10 @@
 import logging
 import random
 import time
-from typing import Optional, Dict, Any
+import numpy as np
+from typing import Optional, Dict, Any, List
 import openai
 import tweepy
-from sentence_transformers import SentenceTransformer, util
 
 from .config import Config
 from .models import WordPair
@@ -326,19 +326,58 @@ class TwitterService:
 
 
 class SemanticService:
-    """Handles semantic similarity calculations."""
+    """Handles semantic similarity calculations using OpenAI embeddings."""
 
     def __init__(self, config: Config):
         self.config = config
         try:
-            self.model = SentenceTransformer(config.sentence_transformer_model)
-            logger.info(f"Semantic model loaded: {config.sentence_transformer_model}")
+            # Reuse the same OpenAI client instead of loading a massive local model
+            self.client = openai.OpenAI(api_key=config.openai_api_key)
+            self.embedding_model = config.openai_embedding_model
+            logger.info(f"Semantic service initialized with OpenAI embeddings: {self.embedding_model}")
         except Exception as e:
-            logger.error(f"Failed to load semantic model: {e}")
+            logger.error(f"Failed to initialize semantic service: {e}")
             raise
 
+    def _get_embedding(self, text: str) -> Optional[List[float]]:
+        """Get embedding for a single text using OpenAI API."""
+        try:
+            response = self.client.embeddings.create(
+                model=self.embedding_model,
+                input=text.strip(),
+                timeout=self.config.request_timeout
+            )
+            
+            if response.data and len(response.data) > 0:
+                return response.data[0].embedding
+            else:
+                logger.warning(f"Empty embedding response for text: {text}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Failed to get embedding for '{text}': {e}")
+            return None
+
+    def _cosine_similarity(self, vec1: List[float], vec2: List[float]) -> float:
+        """Calculate cosine similarity between two vectors."""
+        try:
+            # Convert to numpy arrays for efficient computation
+            a, b = np.array(vec1), np.array(vec2)
+            
+            # Calculate cosine similarity
+            cos_sim = np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
+            
+            # Ensure valid range
+            cos_sim = np.clip(cos_sim, -1.0, 1.0)
+            
+            return float(cos_sim)
+            
+        except Exception as e:
+            logger.error(f"Failed to calculate cosine similarity: {e}")
+            return 0.0
+
     def calculate_divergence(self, word1: str, word2: str) -> float:
-        """Calculate semantic divergence between two words with validation."""
+        """Calculate semantic divergence between two words using OpenAI embeddings."""
         if not word1 or not word2 or not isinstance(word1, str) or not isinstance(word2, str):
             logger.warning(f"Invalid words for divergence calculation: '{word1}', '{word2}'")
             return 0.0
@@ -351,9 +390,17 @@ class SemanticService:
             return 0.0
 
         try:
-            embeddings = self.model.encode([w1, w2])
-            similarity = util.cos_sim(embeddings[0], embeddings[1]).item()
-
+            # Get embeddings from OpenAI
+            emb1 = self._get_embedding(w1)
+            emb2 = self._get_embedding(w2)
+            
+            if emb1 is None or emb2 is None:
+                logger.warning(f"Failed to get embeddings for '{w1}' or '{w2}'")
+                return 0.0
+            
+            # Calculate similarity
+            similarity = self._cosine_similarity(emb1, emb2)
+            
             # Validate similarity score
             if not isinstance(similarity, (int, float)) or not (-1 <= similarity <= 1):
                 logger.warning(f"Invalid similarity score: {similarity}")
@@ -372,18 +419,11 @@ class SemanticService:
             return 0.0
 
     def get_model_info(self) -> Dict[str, Any]:
-        """Get information about the loaded model."""
-        try:
-            return {
-                "model_name": self.config.sentence_transformer_model, "max_seq_length": getattr(
-                    self.model, 'max_seq_length', 'unknown'), "device": str(
-                    getattr(
-                        self.model.device, 'type', 'unknown')) if hasattr(
-                    self.model, 'device') else 'unknown', "pooling": str(
-                        type(
-                            self.model._modules.get(
-                                '1', 'unknown')).__name__) if hasattr(
-                                    self.model, '_modules') else 'unknown'}
-        except Exception as e:
-            logger.error(f"Failed to get model info: {e}")
-            return {"error": str(e)}
+        """Get information about the embedding service."""
+        return {
+            "service": "OpenAI Embeddings API",
+            "model": self.embedding_model,
+            "embedding_dimensions": "1536 (text-embedding-3-small) or 3072 (text-embedding-3-large)",
+            "cost_per_1k_tokens": "~$0.00002 (text-embedding-3-small)",
+            "advantages": "No local model download, always up-to-date, state-of-the-art performance"
+        }

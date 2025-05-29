@@ -1,9 +1,10 @@
+# Core dependencies for EtymoBot (using OpenAI API for ML)
 requests>=2.32.0
 tweepy>=4.15.0
 openai>=1.80.0
 wordfreq>=3.1.0
 beautifulsoup4>=4.13.0
-sentence-transformers>=4.1.0
-torch>=2.4.0
-numpy>=2.1.0
-pytz>=2025.2 
+pytz>=2025.2
+
+# Only numpy needed for simple math operations (cosine similarity)
+numpy>=2.1.0 

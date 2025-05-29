@@ -18,15 +18,22 @@ An automated etymology discovery and Twitter posting bot that finds semantically
 - **🚀 Multiple Deployment Options**: GitHub Actions, Docker, or local execution
 - **📈 Self-Improving**: Learns from failures and skips problematic words
 
+## Requirements
+
+- **Python 3.10+** (for modern language features and compatibility)
+- **OpenAI API key** for content generation **and semantic similarity** (no local ML models needed!)
+- **Twitter API v2 credentials** for posting
+
 ## Features
 
 - **Root-first Discovery**: Scrapes etymologies to build a cache of root-word mappings
-- **Semantic Divergence Scoring**: Uses sentence transformers to find the most contrasting word pairs
+- **AI-Powered Semantic Analysis**: Uses **OpenAI embeddings API** for semantic divergence scoring (no heavy model downloads!)
 - **Optimal Scheduling**: Posts 3 times daily during peak engagement hours (9 AM, 1 PM, 3 PM EST)
 - **Robust Error Handling**: Gracefully skips problematic words and recovers from API failures
-- **Modern APIs**: Uses Twitter API v2 and OpenAI's latest client
+- **Modern APIs**: Uses Twitter API v2 and OpenAI's latest client and embeddings
 - **Persistent State**: SQLite database tracks posted pairs and failed attempts
 - **Deployment Flexible**: Works with GitHub Actions, cron, Docker, or manual runs
+- **Lightweight**: No PyTorch or heavy ML models - everything via OpenAI API!
 
 ## Example Tweets
 
@@ -124,9 +131,9 @@ jobs:
     - uses: actions/checkout@v4
     
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
-        python-version: '3.11'
+        python-version: '3.12'
     
     - name: Install dependencies
       run: |
@@ -155,7 +162,7 @@ jobs:
 ### Docker
 
 ```dockerfile
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 WORKDIR /app
 COPY requirements.txt .

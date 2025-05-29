@@ -33,9 +33,6 @@ def setup_logging(verbose: bool = False) -> None:
         logging.getLogger('urllib3').setLevel(logging.WARNING)
         logging.getLogger('tweepy').setLevel(logging.INFO)
         logging.getLogger('openai').setLevel(logging.INFO)
-        logging.getLogger('sentence_transformers').setLevel(logging.WARNING)
-        logging.getLogger('transformers').setLevel(logging.WARNING)
-        logging.getLogger('torch').setLevel(logging.WARNING)
 
 
 def handle_build_cache(args: argparse.Namespace) -> int:

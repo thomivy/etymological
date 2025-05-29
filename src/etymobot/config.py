@@ -34,8 +34,8 @@ class Config:
 
     # Tweet generation
     openai_model: str = "gpt-4o-mini"
+    openai_embedding_model: str = "text-embedding-3-small"
     max_tweet_length: int = 280
-    sentence_transformer_model: str = "all-MiniLM-L6-v2"
 
     # Network settings
     request_timeout: int = 10
