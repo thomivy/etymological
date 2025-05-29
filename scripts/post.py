@@ -772,7 +772,7 @@ def main():
                 root = verified_etymology.root
                 word1 = verified_etymology.word1
                 word2 = verified_etymology.word2
-                gloss = f"verified with {verified_etymology.confidence:.0%} confidence"
+                gloss = None  # Don't include confidence in tweet
                 
                 logger.info(f"✅ Generated: {word1} + {word2} -> {root}")
                 logger.info(f"📊 Confidence: {verified_etymology.confidence:.2f}")
@@ -781,7 +781,7 @@ def main():
                 logger.warning("❌ Generative approach failed to produce verified etymology, falling back to RAG")
                 use_generative = False
         
-        # Fall back to RAG approach if generative failed
+        # Fall back to RAG approach if generative failed during verification
         if not use_generative:
             logger.info("📚 Using RAG approach: selecting from pre-processed corpus...")
             
@@ -804,6 +804,34 @@ def main():
         
         # Generate tweet (same process for both approaches)
         tweet_text = poster.generate_tweet(word1, word2, root, gloss)
+        
+        # Critical check: If OpenAI ABORTs during tweet generation, reject the etymology completely
+        if use_generative and "ABORT" in tweet_text.upper():
+            logger.warning(f"🚫 OpenAI ABORTed etymology during tweet generation: {word1}+{word2}")
+            logger.warning("❌ Generative approach produced invalid etymology, falling back to RAG")
+            use_generative = False
+            
+            # Fall back to RAG approach
+            logger.info("📚 Using RAG approach as fallback after generative ABORT...")
+            
+            # Initialize RAG components
+            selector = PairSelector(args.roots, args.posted, 
+                                 include_trivial=args.include_trivial, 
+                                 include_questionable=args.include_questionable)
+            
+            # Select a fresh pair from corpus
+            pair_result = selector.select_fresh_pair()
+            if not pair_result:
+                logger.warning("No fresh pairs available for posting")
+                sys.exit(0)
+            
+            root, word1, word2, gloss = pair_result
+            logger.info(f"📖 Selected from corpus: {word1} + {word2} -> {root}")
+            
+            # Generate new tweet for RAG pair
+            tweet_text = poster.generate_tweet(word1, word2, root, gloss)
+            actual_approach = "RAG"
+        
         logger.info(f"📱 Generated tweet: {tweet_text}")
         
         # Post tweet
