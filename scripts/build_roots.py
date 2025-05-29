@@ -16,8 +16,11 @@ import argparse
 import logging
 import sys
 from pathlib import Path
-from typing import Dict, Set, List, Optional
+from typing import Dict, Set, List, Optional, Tuple
 from collections import defaultdict
+
+# Import our new canonicalization utilities
+from utils_roots import canonical_id, extract_gloss
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -82,54 +85,42 @@ class WiktionaryProcessor:
         
         return True
     
-    def extract_roots_from_text(self, etymology_text: str) -> Set[str]:
-        """Extract roots from etymology text using regex patterns."""
+    def extract_roots_from_text(self, etymology_text: str) -> List[Tuple[str, Optional[str]]]:
+        """Extract roots from etymology text using regex patterns.
+        
+        Returns list of (canonical_root_id, gloss) tuples.
+        """
         if not etymology_text:
-            return set()
+            return []
 
-        roots = set()
+        roots = []
         
         for pattern in self.compiled_patterns:
             matches = pattern.findall(etymology_text)
             for match in matches:
-                # Clean up the root more carefully
-                # Remove asterisks but keep special etymological characters
-                root = match.strip('*').strip()
-                
-                # Remove only certain punctuation, keep diacritics and special chars
-                root = re.sub(r'[^\w\-ₐ₁₂₃₄₅₆₇₈₉₀ʰʷʸʲᵃᵇᶜᵈᵉᶠᵍʰⁱʲᵏˡᵐⁿᵒᵖʳˢᵗᵘᵛʷˣʸᶻ]', '', root)
-                root = root.strip('-').lower()
-                
-                # Skip obvious non-roots (language names, common words, etc.)
-                skip_patterns = {
-                    'dutch', 'german', 'english', 'french', 'latin', 'greek', 'sanskrit',
-                    'middle', 'old', 'proto', 'ancient', 'early', 'cognate', 'related',
-                    'compare', 'see', 'also', 'word', 'term', 'meaning', 'sense',
-                    'literally', 'originally', 'probably', 'possibly', 'perhaps',
-                    'scots', 'welsh', 'irish', 'norse', 'germanic', 'celtic', 'slavic',
-                    'saterland', 'frisian', 'lithuanian', 'latvian', 'polish',
-                    'influenced', 'borrowed', 'related', 'akin'
-                }
-                
-                if root.lower() in skip_patterns:
-                    continue
-                
-                # Validate root format - must be substantive and look like a root
-                if 3 <= len(root) <= 25 and not root.isdigit():
-                    # Additional checks for valid roots
-                    if any(c.isalpha() for c in root):  # Must contain letters
-                        roots.add(root)
+                # Get canonical ID for this raw root
+                root_id = canonical_id(match)
+                if root_id:
+                    # Try to extract gloss
+                    gloss = extract_gloss(etymology_text, match)
+                    roots.append((root_id, gloss))
 
         return roots
     
-    def process_entry(self, entry: dict) -> List[tuple]:
-        """Process a single Wiktionary entry and extract root-word mappings."""
+    def process_entry(self, entry: dict) -> List[Tuple[str, str, Optional[str], str]]:
+        """Process a single Wiktionary entry and extract root-word mappings.
+        
+        Returns list of (canonical_root_id, word, gloss, page_id) tuples.
+        """
         mappings = []
         
         # Get the word
         word = entry.get('word', '').strip().lower()
         if not self.is_valid_word(word):
             return mappings
+        
+        # Get a unique page identifier for multi-source checking
+        page_id = entry.get('pos', 'unknown') + '_' + word
         
         # Look for etymology information
         etymology_sources = []
@@ -148,23 +139,24 @@ class WiktionaryProcessor:
             etymology_sources.append(etym)
         
         # Extract roots from all etymology sources
-        all_roots = set()
+        all_roots = []
         for etym_text in etymology_sources:
             if etym_text and isinstance(etym_text, str):
                 roots = self.extract_roots_from_text(etym_text)
-                all_roots.update(roots)
+                all_roots.extend(roots)
         
-        # Create mappings
-        for root in all_roots:
-            mappings.append((root, word))
+        # Create mappings with page ID for multi-source checking
+        for root_id, gloss in all_roots:
+            mappings.append((root_id, word, gloss, page_id))
         
         return mappings
     
-    def process_jsonl_file(self, input_path: str, max_entries: Optional[int] = None) -> Dict[str, List[str]]:
+    def process_jsonl_file(self, input_path: str, max_entries: Optional[int] = None) -> Dict[str, Dict]:
         """Process the entire JSONL file and build root mappings."""
         logger.info(f"Processing Wiktionary dump: {input_path}")
         
-        root_to_words = defaultdict(set)
+        # Track root -> {word -> {page_ids, glosses}}
+        root_data = defaultdict(lambda: defaultdict(lambda: {'page_ids': set(), 'glosses': set()}))
         entries_processed = 0
         entries_with_etymology = 0
         
@@ -172,7 +164,7 @@ class WiktionaryProcessor:
             with gzip.open(input_path, 'rt', encoding='utf-8') as f:
                 for line_num, line in enumerate(f, 1):
                     if line_num % 100000 == 0:
-                        logger.info(f"Processed {line_num:,} lines, found {len(root_to_words)} roots so far...")
+                        logger.info(f"Processed {line_num:,} lines, found {len(root_data)} roots so far...")
                     
                     if max_entries and entries_processed >= max_entries:
                         logger.info(f"Reached maximum entries limit: {max_entries}")
@@ -187,8 +179,10 @@ class WiktionaryProcessor:
                         
                         if mappings:
                             entries_with_etymology += 1
-                            for root, word in mappings:
-                                root_to_words[root].add(word)
+                            for root_id, word, gloss, page_id in mappings:
+                                root_data[root_id][word]['page_ids'].add(page_id)
+                                if gloss:
+                                    root_data[root_id][word]['glosses'].add(gloss)
                     
                     except json.JSONDecodeError as e:
                         logger.debug(f"JSON decode error on line {line_num}: {e}")
@@ -201,21 +195,48 @@ class WiktionaryProcessor:
             logger.error(f"Error reading file {input_path}: {e}")
             return {}
         
-        # Filter to roots with multiple words and convert to final format
+        # Apply multi-source consensus and build final mapping
         final_mapping = {}
-        for root, words_set in root_to_words.items():
-            if len(words_set) >= 2:  # Only include roots with multiple descendants
-                final_mapping[root] = sorted(list(words_set))
+        roots_before_consensus = len(root_data)
         
+        for root_id, word_data in root_data.items():
+            # Count total unique page sources for this root
+            all_page_ids = set()
+            for word, data in word_data.items():
+                all_page_ids.update(data['page_ids'])
+            
+            # Require at least 2 independent sources
+            if len(all_page_ids) >= 2:
+                # Only include words with at least 2 descendants
+                valid_words = [word for word in word_data.keys()]
+                if len(valid_words) >= 2:
+                    # Pick the most common gloss if available
+                    all_glosses = set()
+                    for data in word_data.values():
+                        all_glosses.update(data['glosses'])
+                    
+                    primary_gloss = None
+                    if all_glosses:
+                        # Pick shortest, most common-looking gloss
+                        primary_gloss = min(all_glosses, key=len)
+                    
+                    final_mapping[root_id] = {
+                        'words': sorted(valid_words),
+                        'gloss': primary_gloss,
+                        'sources': len(all_page_ids)
+                    }
+        
+        roots_after_consensus = len(final_mapping)
         logger.info(f"Processing complete:")
         logger.info(f"  📚 Processed {entries_processed:,} entries")
         logger.info(f"  🔍 Found etymology in {entries_with_etymology:,} entries")
-        logger.info(f"  🌳 Extracted {len(final_mapping)} roots with multiple descendants")
-        logger.info(f"  📖 Total word relationships: {sum(len(words) for words in final_mapping.values()):,}")
+        logger.info(f"  🌳 Extracted {roots_before_consensus} raw roots")
+        logger.info(f"  🔒 Multi-source consensus: {roots_after_consensus} verified roots")
+        logger.info(f"  📖 Total word relationships: {sum(len(data['words']) for data in final_mapping.values()):,}")
         
         return final_mapping
     
-    def save_roots(self, root_mapping: Dict[str, List[str]], output_path: str):
+    def save_roots(self, root_mapping: Dict[str, Dict], output_path: str):
         """Save root mapping to compressed JSON."""
         output_file = Path(output_path)
         output_file.parent.mkdir(parents=True, exist_ok=True)
@@ -232,10 +253,10 @@ class WiktionaryProcessor:
         sample_roots = list(root_mapping.keys())[:5]
         logger.info("📋 Sample roots:")
         for root in sample_roots:
-            words = root_mapping[root][:8]  # Show first 8 words
+            words = root_mapping[root]['words'][:8]  # Show first 8 words
             word_list = ', '.join(words)
-            if len(root_mapping[root]) > 8:
-                word_list += f" ... ({len(root_mapping[root])} total)"
+            if len(root_mapping[root]['words']) > 8:
+                word_list += f" ... ({len(root_mapping[root]['words'])} total)"
             logger.info(f"    {root}: {word_list}")
 
 

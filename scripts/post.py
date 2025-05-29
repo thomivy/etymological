@@ -26,6 +26,9 @@ try:
 except ModuleNotFoundError:  # Keep scripts runnable without the package
     openai = None
 
+# Import our canonicalization utilities for trivial affix checking
+from utils_roots import looks_like_trivial_affix
+
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -256,13 +259,14 @@ class TwitterPoster:
 class PairSelector:
     """Handles word pair selection and posted history."""
     
-    def __init__(self, roots_file: str, posted_file: str):
+    def __init__(self, roots_file: str, posted_file: str, include_trivial: bool = False):
         self.roots_file = roots_file
         self.posted_file = posted_file
+        self.include_trivial = include_trivial
         self.roots_data = self._load_roots()
         self.posted_pairs = self._load_posted()
     
-    def _load_roots(self) -> Dict[str, List[str]]:
+    def _load_roots(self) -> Dict[str, Dict]:
         """Load root mappings from compressed JSON."""
         roots_path = Path(self.roots_file)
         if not roots_path.exists():
@@ -272,7 +276,17 @@ class PairSelector:
         try:
             with gzip.open(roots_path, 'rt', encoding='utf-8') as f:
                 roots = json.load(f)
-            logger.info(f"Loaded {len(roots)} roots with {sum(len(words) for words in roots.values())} word relationships")
+            
+            # Handle both old and new formats
+            if roots and isinstance(list(roots.values())[0], dict):
+                # New format with metadata
+                total_words = sum(len(data.get('words', [])) for data in roots.values())
+                logger.info(f"Loaded {len(roots)} roots with {total_words} word relationships")
+            else:
+                # Old format (simple lists)
+                total_words = sum(len(words) for words in roots.values())
+                logger.info(f"Loaded {len(roots)} roots with {total_words} word relationships (legacy format)")
+            
             return roots
         except Exception as e:
             logger.error(f"Failed to load roots file: {e}")
@@ -300,15 +314,26 @@ class PairSelector:
         logger.info(f"Loaded {len(posted) // 2} posted pairs from history")
         return posted
     
-    def select_fresh_pair(self) -> Optional[Tuple[str, str, str]]:
-        """Select a fresh word pair that hasn't been posted."""
+    def select_fresh_pair(self) -> Optional[Tuple[str, str, str, Optional[str]]]:
+        """Select a fresh word pair that hasn't been posted.
+        
+        Returns (root, word1, word2, gloss) or None.
+        """
         if not self.roots_data:
             logger.error("No root data available for pair selection")
             return None
         
         # Build list of all possible pairs
         candidates = []
-        for root, words in self.roots_data.items():
+        for root, root_data in self.roots_data.items():
+            # Handle both old and new formats
+            if isinstance(root_data, dict):
+                words = root_data.get('words', [])
+                gloss = root_data.get('gloss')
+            else:
+                words = root_data  # Legacy format
+                gloss = None
+            
             if len(words) < 2:
                 continue
             
@@ -320,17 +345,22 @@ class PairSelector:
                     
                     # Check if pair hasn't been posted
                     if pair not in self.posted_pairs:
-                        candidates.append((root, word1, word2))
+                        # Filter trivial affix cases unless explicitly included
+                        if not self.include_trivial and looks_like_trivial_affix(root, word1, word2):
+                            logger.debug(f"Skipping trivial affix pair: {word1} + {word2} (root: {root})")
+                            continue
+                        
+                        candidates.append((root, word1, word2, gloss))
         
         if not candidates:
             logger.warning("No fresh pairs available - all combinations have been posted")
             return None
         
         # Randomly select from candidates
-        root, word1, word2 = random.choice(candidates)
+        root, word1, word2, gloss = random.choice(candidates)
         logger.info(f"Selected fresh pair: '{word1}' + '{word2}' (root: '{root}')")
         
-        return root, word1, word2
+        return root, word1, word2, gloss
     
     def log_posted_pair(self, word1: str, word2: str):
         """Log the posted pair to CSV file."""
@@ -355,6 +385,8 @@ def main():
                       help='Path to posted pairs CSV log')
     parser.add_argument('--dry-run', '-n', action='store_true',
                       help='Generate tweet but do not post to Twitter')
+    parser.add_argument('--include-trivial', '-t', action='store_true',
+                      help='Include trivial morphological pairs (e.g., car/carriage)')
     parser.add_argument('--verbose', '-v', action='store_true',
                       help='Enable verbose logging')
     
@@ -365,7 +397,7 @@ def main():
     
     try:
         # Initialize components
-        selector = PairSelector(args.roots, args.posted)
+        selector = PairSelector(args.roots, args.posted, include_trivial=args.include_trivial)
         poster = TwitterPoster(dry_run=args.dry_run)
         
         # Select a fresh pair
@@ -374,7 +406,7 @@ def main():
             logger.warning("No fresh pairs available for posting")
             sys.exit(0)
         
-        root, word1, word2 = pair_result
+        root, word1, word2, gloss = pair_result
         
         # Generate tweet
         tweet_text = poster.generate_tweet(word1, word2, root)
