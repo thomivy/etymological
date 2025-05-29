@@ -177,4 +177,4 @@ Multiple tweet formats ensure engaging content:
 
 ## License
 
-MIT License - see LICENSE file for details.
+TBD
