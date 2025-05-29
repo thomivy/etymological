@@ -1,0 +1,111 @@
+name: Weekly Etymology Corpus Refresh
+
+on:
+  schedule:
+    # Run every Saturday at 02:00 UTC (9 PM EST Friday)
+    - cron: '0 2 * * SAT'
+  workflow_dispatch: # Allow manual triggering
+    inputs:
+      sample_size:
+        description: 'Number of words to process'
+        required: false
+        default: '300'
+        type: string
+
+jobs:
+  refresh-corpus:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Needed to commit root data
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+        cache: 'pip'
+    
+    - name: Install dependencies
+      run: |
+        pip install requests beautifulsoup4 wordfreq
+    
+    - name: Build etymology corpus
+      run: |
+        # Determine sample size
+        SAMPLE_SIZE="${{ github.event.inputs.sample_size || '300' }}"
+        
+        echo "Building etymology corpus with $SAMPLE_SIZE words..."
+        python scripts/build_roots.py --output data/roots.json.gz --sample-size $SAMPLE_SIZE --verbose
+        
+        # Check if file was created successfully
+        if [ -f "data/roots.json.gz" ]; then
+          FILE_SIZE=$(stat -c%s "data/roots.json.gz" 2>/dev/null || stat -f%z "data/roots.json.gz")
+          echo "✅ Successfully built corpus: data/roots.json.gz (${FILE_SIZE} bytes)"
+        else
+          echo "❌ Failed to build corpus file"
+          exit 1
+        fi
+    
+    - name: Validate corpus
+      run: |
+        python -c "
+        import gzip, json
+        with gzip.open('data/roots.json.gz', 'rt') as f:
+            data = json.load(f)
+            print(f'📊 Corpus contains {len(data)} roots with {sum(len(words) for words in data.values())} total word relationships')
+            
+            # Show sample data
+            sample_roots = list(data.keys())[:3]
+            for root in sample_roots:
+                words = data[root][:5]  # First 5 words
+                print(f'   {root}: {words}...' if len(data[root]) > 5 else f'   {root}: {words}')
+        "
+    
+    - name: Check for changes
+      id: check_changes
+      run: |
+        if git diff --quiet data/roots.json.gz 2>/dev/null; then
+          echo "changes=false" >> $GITHUB_OUTPUT
+          echo "📋 No changes detected in etymology corpus"
+        else
+          echo "changes=true" >> $GITHUB_OUTPUT
+          echo "🔄 Changes detected in etymology corpus"
+        fi
+    
+    - name: Commit and push changes
+      if: steps.check_changes.outputs.changes == 'true'
+      run: |
+        git config user.name "EtymoBot[bot]"
+        git config user.email "noreply@github.com"
+        
+        git add data/roots.json.gz
+        
+        # Create basic commit message
+        COMMIT_MSG="Weekly etymology corpus refresh $(date -u +%Y-%m-%d)"
+        git commit -m "$COMMIT_MSG"
+        git push
+        
+        echo "✅ Committed and pushed etymology corpus update"
+    
+    - name: Report completion
+      run: |
+        if [ "${{ steps.check_changes.outputs.changes }}" = "true" ]; then
+          echo "🎉 Etymology corpus refresh completed successfully with updates!"
+        else
+          echo "✅ Etymology corpus refresh completed - no updates needed"
+        fi
+        
+        # Log final status
+        if [ -f "data/roots.json.gz" ]; then
+          python -c "
+          import gzip, json
+          with gzip.open('data/roots.json.gz', 'rt') as f:
+              data = json.load(f)
+              print(f'📈 Final corpus: {len(data)} roots ready for tweet generation')
+          "
+        fi 
