@@ -160,7 +160,8 @@ Return JSON: {"word1": "word", "word2": "word", "root": "*root", "reasoning": "b
         # Known false etymology patterns to block
         false_patterns = {
             ("southpaw", "sinister"): "southpaw is modern American boxing slang, not from Latin",
-            ("salary", "salad"): "salary from Latin salarium (soldier's pay), salad from Vulgar Latin salata - no connection",
+            # NOTE: salary+salad removed - they DO share etymology through salt!
+            # salary: Latin salarium (soldier's salt pay), salad: Latin sal (salt seasoning)
             ("radar", "radio"): "radar is WWII acronym, not etymologically related to radio",
             ("scuba", "submarine"): "scuba is modern acronym, not classical etymology",
             ("computer", "compute"): "too obvious/modern to be interesting",
@@ -224,11 +225,11 @@ Return JSON: {"word1": "word", "word2": "word", "root": "*root", "reasoning": "b
             ("guest", "host"): "Both from PIE *ghos-ti- meaning stranger/guest",
             ("king", "kin"): "Both from PIE *ǵenh₁- meaning to beget/give birth",
             ("peculiar", "pecuniary"): "Both from Latin 'pecus' meaning cattle/livestock",
+            ("salary", "salad"): "Both from Latin 'sal' meaning salt - salary was soldier's salt allowance, salad seasoned with salt",
         }
         
         # Known false etymologies to reject
         known_false = {
-            ("salary", "salad"): "No credible sources support this connection - salary from Latin salarium (soldier's pay), salad from Vulgar Latin salata",
             ("sinister", "southpaw"): "Southpaw is modern American boxing slang, not from Latin sinister",
         }
         
@@ -781,6 +782,9 @@ def main():
             root, word1, word2, gloss = pair_result
             logger.info(f"📖 Selected from corpus: {word1} + {word2} -> {root}")
         
+        # Track which approach was actually used for final logging
+        actual_approach = "GENERATIVE" if use_generative else "RAG"
+        
         # Generate tweet (same process for both approaches)
         tweet_text = poster.generate_tweet(word1, word2, root, gloss)
         logger.info(f"📱 Generated tweet: {tweet_text}")
@@ -797,7 +801,7 @@ def main():
             selector.log_posted_pair(word1, word2)
             logger.info("📝 Logged to posted pairs history")
         
-        logger.info(f"✅ Tweet posting completed successfully using {approach_name} approach!")
+        logger.info(f"✅ Tweet posting completed successfully using {actual_approach} approach!")
         
     except KeyboardInterrupt:
         logger.info("Posting interrupted by user")
