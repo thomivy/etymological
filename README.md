@@ -11,13 +11,13 @@ An automated etymology discovery and Twitter posting bot that finds semantically
 - **🚀 GitHub-Native Pipeline**: Fully automated via GitHub Actions - no external infrastructure needed
 - **📈 Self-Improving**: Learns from posting history and avoids repetition
 - **🎭 Template Variety**: Multiple tweet formats for engaging, educational content
-- **🔄 Zero Dependencies**: No OpenAI, ML models, or external databases required
+- **🔄 Zero Dependencies**: ML models enahnce output but are not required, and neither are external databases. 
 
 ## Requirements
 
 - **GitHub repository** with Actions enabled
 - **Twitter API v2 credentials** for posting
-- **2.2GB disk space** for Wiktionary dump processing (handled automatically by GitHub Actions)
+- **2.2GB disk space** for Wiktionary dump processing (handled automatically by GitHub Actions). This can be done locally and the post-processed file uploaded.
 
 ## Example Tweets
 
