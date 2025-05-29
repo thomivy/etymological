@@ -14,11 +14,14 @@ import sys
 import argparse
 import logging
 import time
+import asyncio
+import aiohttp
 import requests
 from pathlib import Path
 from typing import Dict, List, Tuple, Set, Optional
 from dataclasses import dataclass
 import tweepy
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 # Optional imports
 try:
@@ -37,6 +40,7 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("openai").setLevel(logging.WARNING)
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 logging.getLogger("requests").setLevel(logging.WARNING)
+logging.getLogger("aiohttp").setLevel(logging.WARNING)
 
 
 @dataclass
@@ -57,17 +61,25 @@ class GenerativeEtymologyGenerator:
     No corpus, no RAG - just AI creativity verified by web search.
     """
     
-    def __init__(self, openai_api_key: str):
+    def __init__(self, openai_api_key: str, model: str = "gpt-4o"):
         self.openai_api_key = openai_api_key
+        self.model = model
+        self.openai_client = None
+        self._search_cache = {}  # Cache for web search results
         
-    def generate_verified_etymology(self, max_attempts: int = 10) -> Optional[VerifiedEtymology]:
+        if OpenAI:
+            self.openai_client = OpenAI(api_key=openai_api_key)
+        else:
+            raise ImportError("OpenAI package not available")
+            
+    def generate_verified_etymology(self, max_attempts: int = 5) -> Optional[VerifiedEtymology]:
         """
         Generate a verified etymology using pure AI + web search pipeline.
         
         Returns None if no suitable etymology can be verified within max_attempts.
         """
-        if not OpenAI:
-            logger.error("OpenAI not available, cannot use generative approach")
+        if not self.openai_client:
+            logger.error("OpenAI client not available, cannot use generative approach")
             return None
             
         for attempt in range(max_attempts):
@@ -92,6 +104,9 @@ class GenerativeEtymologyGenerator:
                     confidence_msg = f" (confidence: {verification.confidence:.2f})" if verification else ""
                     logger.info(f"❌ REJECTED: {word1} + {word2}{confidence_msg}")
                     
+            except openai.OpenAIError as e:
+                logger.warning(f"OpenAI API error on attempt {attempt + 1}: {e}")
+                continue
             except Exception as e:
                 logger.warning(f"Attempt {attempt + 1} failed: {e}")
                 continue
@@ -99,13 +114,12 @@ class GenerativeEtymologyGenerator:
         logger.warning(f"Failed to generate verified etymology after {max_attempts} attempts")
         return None
     
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
     def _generate_etymology_suggestion(self) -> Optional[Dict]:
         """Generate etymology suggestion using AI with enhanced prompting."""
         try:
-            client = OpenAI(api_key=self.openai_api_key)
-            
-            response = client.chat.completions.create(
-                model="gpt-4o",
+            response = self.openai_client.chat.completions.create(
+                model=self.model,
                 messages=[
                     {
                         "role": "system",
@@ -144,7 +158,11 @@ Return JSON format: {"word1": "word", "word2": "word", "root": "*root", "reasoni
             elif '```' in content:
                 content = content.split('```')[1].strip()
             
-            suggestion = json.loads(content)
+            try:
+                suggestion = json.loads(content)
+            except json.JSONDecodeError as e:
+                logger.warning(f"Failed to parse JSON response: {content}")
+                return None
             
             # Validate required fields
             required_fields = ['word1', 'word2', 'root']
@@ -154,6 +172,9 @@ Return JSON format: {"word1": "word", "word2": "word", "root": "*root", "reasoni
                 
             return suggestion
             
+        except openai.OpenAIError as e:
+            logger.error(f"OpenAI API error in etymology suggestion: {e}")
+            raise
         except Exception as e:
             logger.error(f"Failed to generate etymology suggestion: {e}")
             return None
@@ -163,7 +184,7 @@ Return JSON format: {"word1": "word", "word2": "word", "root": "*root", "reasoni
         Use web search to verify the etymology claim.
         """
         # Step 1: Gather web evidence
-        evidence = self._search_web_evidence(word1, word2, root)
+        evidence = asyncio.run(self._search_web_evidence_async(word1, word2, root))
         
         # Step 2: AI analysis of evidence
         confidence = self._ai_analyze_evidence(word1, word2, root, reasoning, evidence)
@@ -180,72 +201,91 @@ Return JSON format: {"word1": "word", "word2": "word", "root": "*root", "reasoni
         
         return None
     
-    def _search_web_evidence(self, word1: str, word2: str, root: str) -> str:
+    async def _search_web_evidence_async(self, word1: str, word2: str, root: str) -> str:
         """
-        Search for web evidence about the etymology claim.
+        Search for web evidence about the etymology claim using async requests.
         """
-        try:
-            # Search for etymological information about both words
-            queries = [
-                f'"{word1}" etymology origin',
-                f'"{word2}" etymology origin',
-                f'"{word1}" "{word2}" etymology connection',
-                f'{root} etymology root meaning'
-            ]
+        # Define search queries
+        queries = [
+            f'"{word1}" etymology origin',
+            f'"{word2}" etymology origin',
+            f'"{word1}" "{word2}" etymology connection',
+            f'{root} etymology root meaning'
+        ]
+        
+        # Check cache first
+        cache_key = f"{word1}:{word2}:{root}"
+        if cache_key in self._search_cache:
+            logger.debug(f"Using cached evidence for {cache_key}")
+            return self._search_cache[cache_key]
+        
+        evidence_pieces = []
+        
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
+            # Create tasks for parallel execution
+            tasks = [self._search_single_query(session, query) for query in queries]
             
-            evidence_pieces = []
+            # Execute searches in parallel with rate limiting
+            results = await asyncio.gather(*tasks, return_exceptions=True)
             
-            for query in queries:
-                try:
-                    # Use DuckDuckGo Instant Answer API (no key required)
-                    response = requests.get(
-                        'https://api.duckduckgo.com/',
-                        params={
-                            'q': query,
-                            'format': 'json',
-                            'no_html': '1',
-                            'skip_disambig': '1'
-                        },
-                        timeout=5
-                    )
-                    
-                    if response.status_code == 200:
-                        data = response.json()
-                        
-                        # Extract relevant information
-                        abstract = data.get('Abstract', '')
-                        definition = data.get('Definition', '')
-                        
-                        if abstract:
-                            evidence_pieces.append(f"Search '{query}': {abstract[:200]}")
-                        elif definition:
-                            evidence_pieces.append(f"Search '{query}': {definition[:200]}")
-                            
-                except Exception as e:
-                    logger.debug(f"Search failed for '{query}': {e}")
-                    continue
-                    
-                # Rate limiting
-                time.sleep(0.5)
-            
-            if evidence_pieces:
-                return " | ".join(evidence_pieces)
-            else:
-                return f"Limited web evidence found for {word1}/{word2} etymology connection"
-                
-        except Exception as e:
-            logger.warning(f"Web search failed: {e}")
-            return f"Web search unavailable - using AI reasoning only for {word1}/{word2}"
+            for i, result in enumerate(results):
+                if isinstance(result, Exception):
+                    logger.debug(f"Search failed for '{queries[i]}': {result}")
+                elif result:
+                    evidence_pieces.append(f"Search '{queries[i]}': {result}")
+        
+        # Combine evidence
+        if evidence_pieces:
+            evidence = " | ".join(evidence_pieces[:2])  # Limit to top 2 to reduce token cost
+        else:
+            evidence = f"Limited web evidence found for {word1}/{word2} etymology connection"
+        
+        # Cache the result
+        self._search_cache[cache_key] = evidence
+        return evidence
     
+    async def _search_single_query(self, session: aiohttp.ClientSession, query: str) -> Optional[str]:
+        """Search a single query with rate limiting."""
+        try:
+            # Rate limiting
+            await asyncio.sleep(0.1)  # 100ms between requests
+            
+            async with session.get(
+                'https://api.duckduckgo.com/',
+                params={
+                    'q': query,
+                    'format': 'json',
+                    'no_html': '1',
+                    'skip_disambig': '1'
+                }
+            ) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    
+                    # Extract relevant information
+                    abstract = data.get('Abstract', '')
+                    definition = data.get('Definition', '')
+                    
+                    if abstract:
+                        return abstract[:200]
+                    elif definition:
+                        return definition[:200]
+                        
+        except asyncio.TimeoutError:
+            logger.debug(f"Timeout for query: {query}")
+        except Exception as e:
+            logger.debug(f"Search error for '{query}': {e}")
+            
+        return None
+    
+    @retry(stop=stop_after_attempt(2), wait=wait_exponential(multiplier=1, min=2, max=5))
     def _ai_analyze_evidence(self, word1: str, word2: str, root: str, reasoning: str, evidence: str) -> float:
         """
         Have AI analyze the web evidence and reasoning to determine confidence.
         """
         try:
-            client = OpenAI(api_key=self.openai_api_key)
-            
-            response = client.chat.completions.create(
-                model="gpt-4o",
+            response = self.openai_client.chat.completions.create(
+                model=self.model,
                 messages=[
                     {
                         "role": "system",
@@ -291,22 +331,27 @@ Rate confidence (0.0-1.0) based on evidence quality and factual accuracy."""
             
             response_text = response.choices[0].message.content.strip()
             
-            # Extract confidence score
-            try:
-                import re
-                match = re.search(r'(\d*\.?\d+)', response_text)
-                if match:
-                    confidence = float(match.group(1))
-                    confidence = max(0.0, min(1.0, confidence))
-                    logger.debug(f"AI evidence analysis for {word1}+{word2}: {confidence}")
-                    return confidence
-                else:
-                    logger.warning(f"Could not parse confidence from: {response_text}")
-                    return 0.3
-            except ValueError:
-                logger.warning(f"Failed to convert confidence to float: {response_text}")
-                return 0.3
+            # Extract confidence score with strict validation
+            import re
+            # Match patterns like "0.8", "0.85", "1.0" but reject things like "8.0" or "In 8th century"
+            pattern = r'^([01](?:\.\d+)?|\.\d+)$'
+            match = re.match(pattern, response_text.strip())
+            
+            if match:
+                confidence = float(match.group(1))
+                confidence = max(0.0, min(1.0, confidence))
+                logger.debug(f"AI evidence analysis for {word1}+{word2}: {confidence}")
+                return confidence
+            else:
+                logger.warning(f"Invalid confidence format: '{response_text}' - should be 0.0-1.0")
+                raise ValueError(f"Invalid confidence format: {response_text}")
                 
+        except openai.OpenAIError as e:
+            logger.error(f"OpenAI API error in evidence analysis: {e}")
+            raise
+        except ValueError as e:
+            logger.warning(f"Confidence parsing failed: {e}")
+            raise
         except Exception as e:
             logger.warning(f"AI evidence analysis failed: {e}")
             return 0.0
@@ -315,21 +360,23 @@ Rate confidence (0.0-1.0) based on evidence quality and factual accuracy."""
 class TwitterPoster:
     """Handles tweet generation and posting."""
     
-    def __init__(self, dry_run: bool = False):
+    def __init__(self, dry_run: bool = False, model: str = "gpt-4o-mini"):
         self.dry_run = dry_run
+        self.model = model
         self.twitter_client = None
+        self.openai_client = None
         
         # Check for OpenAI availability
         self.use_ai = bool(os.getenv('OPENAI_API_KEY') and openai is not None)
         
         if self.use_ai:
-            openai.api_key = os.getenv('OPENAI_API_KEY')
-        
-        if not dry_run:
-            self._initialize_twitter()
+            self.openai_client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
     
     def _initialize_twitter(self):
-        """Initialize Twitter API client."""
+        """Initialize Twitter API client lazily."""
+        if self.twitter_client is not None:
+            return
+            
         try:
             required_vars = [
                 'TWITTER_CONSUMER_KEY',
@@ -361,51 +408,40 @@ class TwitterPoster:
             logger.error(f"Twitter initialization failed: {e}")
             raise
     
+    @retry(stop=stop_after_attempt(2), wait=wait_exponential(multiplier=1, min=2, max=5))
     def generate_tweet(self, word1: str, word2: str, root: str) -> str:
         """Generate a tweet using AI with enhanced literary style."""
         
-        if not self.use_ai:
+        if not self.use_ai or not self.openai_client:
             # Simple fallback if AI not available
             return f'{word1} and {word2} share the ancient root {root}. Words wander but roots remain.'
         
         try:
-            client = OpenAI(api_key=openai.api_key)
-            
-            response = client.chat.completions.create(
-                model="gpt-4o",
+            # Shortened, more efficient prompt
+            system_prompt = """Craft a tweet (≤280 chars) revealing shared word ancestry. Style: poetic, insightful, compressed.
+
+Format: "word1 and word2 share ROOT. [poetic reflection on meaning drift]"
+
+Examples:
+- "gregarious and egregious share GREX ('herd'). One mingles with the flock, the other stands apart—language keeps score of quiet expulsions."
+- "sacrifice meets sacred under SACR ('holy'). Holiness is purchased with loss; the offered thing becomes precious by vanishing."
+
+Focus on the semantic journey from ancient root to modern meanings."""
+
+            response = self.openai_client.chat.completions.create(
+                model=self.model,
                 messages=[
-                    {
-                        "role": "system",
-                        "content": """ROLE: EtymoWriter
-
-Mission
-Craft a single tweet (≤ 280 characters) that uncovers the shared ancestry of two English words and shows how their meanings drifted. Write with Lydia Davis's compression, Tolkien's root-reverence, Nabokov's sly pivots, and McPhee's concrete imagery.
-
-Few-Shot Inspirations
-gregarious and egregious share GREX ("herd"). One mingles with the flock, the other stands apart—language keeps score of our quiet expulsions.
-sacrifice meets sacred under SACR ("holy"). Holiness is purchased with loss; the offered thing becomes precious by vanishing.
-write walks beside rite through WREH₁ ("carve"). Clay tablets became covenants; every signature still cuts into the world a little.
-enemy and amicable grow from AMAC ("friend"). An un-friend is intimacy inverted; hatred remembers the shape of what it once embraced.
-sporadic and diaspora sowed from SPEI ("scatter seed"). Seeds drift, nations wander—the earth keeps count of every exile.
-ostracize hides pottery shards inside itself, a reminder that democracy once voted with broken clay.
-precarious carries a prayer: when footing slips, the lips petition.
-rodent and erode gnaw at their objects—one with teeth, one with time.
-caprice cavorts with capricious on goatish legs, mischief in every leap.
-sabotage began with a wooden shoe, a protest stomp that still echoes in the gears."""
-                    },
-                    {
-                        "role": "user",
-                        "content": f"{word1} and {word2} share {root}. Write one tweet that reveals their divergence and reflects poetically on the drift in meaning. Show how the ancient root connects to both modern meanings."
-                    }
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"{word1} and {word2} share {root}. Write one poetic tweet revealing their divergence."}
                 ],
                 temperature=0.7,
-                max_tokens=160
+                max_tokens=100  # Reduced for efficiency
             )
 
             content = response.choices[0].message.content.strip()
 
             # Log the actual response for debugging
-            logger.info(f"OpenAI response for {word1}+{word2} (root: {root}): '{content}'")
+            logger.debug(f"OpenAI response for {word1}+{word2} (root: {root}): '{content}'")
 
             # Validate response
             if not content:
@@ -430,22 +466,29 @@ sabotage began with a wooden shoe, a protest stomp that still echoes in the gear
                     logger.warning(f"Even truncated response too long ({len(content)} chars), using template fallback")
                     return "ABORT"
             
-            # Final validation - must contain both words and root
+            # Final validation - must contain both words
             if word1.lower() not in content.lower() or word2.lower() not in content.lower():
                 logger.warning(f"OpenAI response missing required words: {word1}, {word2}")
                 return "ABORT"
 
             return content
 
+        except openai.OpenAIError as e:
+            logger.error(f"OpenAI API error in tweet generation: {e}")
+            raise
         except Exception as e:
-            logger.error(f"OpenAI generation failed: {e}")
+            logger.error(f"Tweet generation failed: {e}")
             return "ABORT"
 
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=8))
     def post_tweet(self, tweet_text: str) -> Optional[str]:
         """Post tweet to Twitter and return tweet ID."""
         if self.dry_run:
             logger.info(f"DRY RUN - Would post tweet: {tweet_text}")
             return "dry_run_tweet_id"
+        
+        # Lazy initialize Twitter client only when needed
+        self._initialize_twitter()
         
         try:
             response = self.twitter_client.create_tweet(text=tweet_text)
@@ -453,6 +496,9 @@ sabotage began with a wooden shoe, a protest stomp that still echoes in the gear
             logger.info(f"Posted tweet: {tweet_text[:50]}... (ID: {tweet_id})")
             return tweet_id
             
+        except tweepy.TweepyException as e:
+            logger.error(f"Twitter API error: {e}")
+            raise
         except Exception as e:
             logger.error(f"Failed to post tweet: {e}")
             return None
@@ -465,6 +511,12 @@ def main():
                       help='Generate tweet but do not post to Twitter')
     parser.add_argument('--verbose', '-v', action='store_true',
                       help='Enable verbose logging')
+    parser.add_argument('--max-attempts', type=int, default=5,
+                      help='Maximum attempts to generate verified etymology (default: 5)')
+    parser.add_argument('--model', type=str, default='gpt-4o',
+                      help='OpenAI model for etymology generation (default: gpt-4o)')
+    parser.add_argument('--tweet-model', type=str, default='gpt-4o-mini',
+                      help='OpenAI model for tweet generation (default: gpt-4o-mini)')
     
     args = parser.parse_args()
     
@@ -488,15 +540,15 @@ def main():
         sys.exit(1)
     
     try:
-        # Initialize Twitter poster
-        poster = TwitterPoster(dry_run=args.dry_run)
+        # Initialize Twitter poster with improved configuration
+        poster = TwitterPoster(dry_run=args.dry_run, model=args.tweet_model)
         
-        logger.info(f"🤖 Pure generative approach - using OpenAI API with key ending in: ...{api_key[-4:]}")
+        logger.info(f"🤖 Pure generative approach - using {args.model} for generation, {args.tweet_model} for tweets")
         
         # Generate verified etymology using AI + web search
         logger.info("🤖 Generating verified etymology using AI + web search...")
-        generator = GenerativeEtymologyGenerator(api_key)
-        verified_etymology = generator.generate_verified_etymology(max_attempts=10)
+        generator = GenerativeEtymologyGenerator(api_key, model=args.model)
+        verified_etymology = generator.generate_verified_etymology(max_attempts=args.max_attempts)
         
         if verified_etymology:
             root = verified_etymology.root
