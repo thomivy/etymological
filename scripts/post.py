@@ -89,12 +89,7 @@ class GenerativeEtymologyGenerator:
                 
                 logger.info(f"Attempt {attempt + 1}: Testing {word1} + {word2} -> {root}")
                 
-                # Step 2: Quick validation to catch obvious false etymologies
-                if self._is_obviously_false_etymology(word1, word2, root):
-                    logger.info(f"❌ REJECTED: {word1} + {word2} (obviously false etymology)")
-                    continue
-                
-                # Step 3: Verify using simulated evidence (in production, would use web search)
+                # Verify using simulated evidence (in production, would use web search)
                 verification = self._verify_etymology_connection(word1, word2, root, reasoning)
                 
                 if verification and verification.confidence >= 0.7:
@@ -166,6 +161,10 @@ Return JSON: {"word1": "word", "word2": "word", "root": "*root", "reasoning": "b
             ("scuba", "submarine"): "scuba is modern acronym, not classical etymology",
             ("computer", "compute"): "too obvious/modern to be interesting",
             ("television", "telephone"): "both modern Greek compounds, not surprising",
+            ("trivial", "trivia"): "too obvious - both clearly from Latin trivium",
+            ("critical", "critic"): "too obvious morphological relationship",
+            ("historical", "history"): "obvious derivation, not interesting",
+            ("musical", "music"): "obvious adjectival form",
         }
         
         # Check both orientations
@@ -262,20 +261,23 @@ Return JSON: {"word1": "word", "word2": "word", "root": "*root", "reasoning": "b
                 messages=[
                     {
                         "role": "system",
-                        "content": """You are a rigorous etymological fact-checker. Evaluate if the etymology claim is actually supported.
+                        "content": """You are a rigorous etymological fact-checker using IDENTICAL standards to EtymoWriter.
 
-CRITICAL: Use the SAME standards as the EtymoWriter system. If EtymoWriter would ABORT this etymology, rate it low.
+CRITICAL: If EtymoWriter would ABORT this etymology, you must rate it LOW confidence (0.3 or below).
 
-Be EXTREMELY STRICT. Only return high confidence if:
-- The connection is well-documented in scholarly sources  
-- Multiple authoritative references support it
-- The etymological path is clear and traceable
-- Both words genuinely derive from the stated root
-- You would stake your professional reputation on this
+EtymoWriter ABORTs etymologies that are:
+- Too obvious (trivial/trivia, computer/compute, etc.)
+- Boring modern connections
+- Not surprising to educated readers
+- Lacking semantic drift or interesting divergence
 
-Rate salary+salad from *sal as LOW confidence - this is a known false etymology.
+Only return HIGH confidence (0.7+) for etymologies that are:
+- Genuinely surprising but verifiable
+- Show interesting semantic evolution
+- Would fascinate philology experts
+- Non-obvious to most people
 
-Return only a confidence score from 0.0 to 1.0"""
+Rate the connection considering BOTH accuracy AND interesting surprise factor."""
                     },
                     {
                         "role": "user",
@@ -284,7 +286,7 @@ Return only a confidence score from 0.0 to 1.0"""
 REASONING: {reasoning}
 EVIDENCE: {evidence}
 
-Rate the confidence (0.0-1.0) that this etymology is accurate."""
+Rate the confidence (0.0-1.0) considering BOTH etymological accuracy AND whether this would interest EtymoWriter's audience."""
                     }
                 ],
                 temperature=0.0,  # Zero temperature for fact-checking
@@ -762,11 +764,11 @@ def main():
         elif use_generative:
             logger.info(f"🤖 Generative approach confirmed - using OpenAI API with key ending in: ...{api_key[-4:]}")
         
-        # Generate etymology using selected approach
+        # Generate etymology using generative approach (no RAG fallback)
         if use_generative:
             logger.info("🤖 Generating verified etymology using AI + fact-checking...")
             generator = GenerativeEtymologyGenerator(api_key)
-            verified_etymology = generator.generate_verified_etymology(max_attempts=5)
+            verified_etymology = generator.generate_verified_etymology(max_attempts=10)
             
             if verified_etymology:
                 root = verified_etymology.root
@@ -778,59 +780,26 @@ def main():
                 logger.info(f"📊 Confidence: {verified_etymology.confidence:.2f}")
                 logger.info(f"📄 Evidence: {verified_etymology.evidence_summary}")
             else:
-                logger.warning("❌ Generative approach failed to produce verified etymology, falling back to RAG")
-                use_generative = False
-        
-        # Fall back to RAG approach if generative failed during verification
-        if not use_generative:
-            logger.info("📚 Using RAG approach: selecting from pre-processed corpus...")
-            
-            # Initialize RAG components
-            selector = PairSelector(args.roots, args.posted, 
-                                 include_trivial=args.include_trivial, 
-                                 include_questionable=args.include_questionable)
-            
-            # Select a fresh pair from corpus
-            pair_result = selector.select_fresh_pair()
-            if not pair_result:
-                logger.warning("No fresh pairs available for posting")
-                sys.exit(0)
-            
-            root, word1, word2, gloss = pair_result
-            logger.info(f"📖 Selected from corpus: {word1} + {word2} -> {root}")
+                logger.error("❌ Generative approach failed to produce verified etymology after multiple attempts")
+                logger.error("💡 Consider adjusting confidence thresholds or generation prompts")
+                sys.exit(1)
+        else:
+            logger.error("❌ RAG approach has been disabled - only generative approach is supported")
+            logger.error("💡 Remove --use-rag flag to use the default generative approach")
+            sys.exit(1)
         
         # Track which approach was actually used for final logging
         actual_approach = "GENERATIVE" if use_generative else "RAG"
         
-        # Generate tweet (same process for both approaches)
+        # Generate tweet (generative approach only)
         tweet_text = poster.generate_tweet(word1, word2, root, gloss)
         
-        # Critical check: If OpenAI ABORTs during tweet generation, reject the etymology completely
-        if use_generative and "ABORT" in tweet_text.upper():
-            logger.warning(f"🚫 OpenAI ABORTed etymology during tweet generation: {word1}+{word2}")
-            logger.warning("❌ Generative approach produced invalid etymology, falling back to RAG")
-            use_generative = False
-            
-            # Fall back to RAG approach
-            logger.info("📚 Using RAG approach as fallback after generative ABORT...")
-            
-            # Initialize RAG components
-            selector = PairSelector(args.roots, args.posted, 
-                                 include_trivial=args.include_trivial, 
-                                 include_questionable=args.include_questionable)
-            
-            # Select a fresh pair from corpus
-            pair_result = selector.select_fresh_pair()
-            if not pair_result:
-                logger.warning("No fresh pairs available for posting")
-                sys.exit(0)
-            
-            root, word1, word2, gloss = pair_result
-            logger.info(f"📖 Selected from corpus: {word1} + {word2} -> {root}")
-            
-            # Generate new tweet for RAG pair
-            tweet_text = poster.generate_tweet(word1, word2, root, gloss)
-            actual_approach = "RAG"
+        # If OpenAI ABORTs during tweet generation, this indicates the etymology wasn't good enough
+        if "ABORT" in tweet_text.upper():
+            logger.warning(f"🚫 OpenAI rejected etymology during tweet generation: {word1}+{word2}")
+            logger.error("❌ Even verified etymologies were rejected as uninteresting")
+            logger.error("💡 Consider adjusting generation prompts for more interesting etymologies")
+            sys.exit(1)
         
         logger.info(f"📱 Generated tweet: {tweet_text}")
         
@@ -840,13 +809,7 @@ def main():
             logger.error("Failed to post tweet")
             sys.exit(1)
         
-        # Log the posted pair (only if actually posted and using RAG approach)
-        # Generative approach doesn't need corpus logging since it doesn't reuse pairs
-        if not args.dry_run and not use_generative:
-            selector.log_posted_pair(word1, word2)
-            logger.info("📝 Logged to posted pairs history")
-        
-        logger.info(f"✅ Tweet posting completed successfully using {actual_approach} approach!")
+        logger.info(f"✅ Tweet posting completed successfully using GENERATIVE approach!")
         
     except KeyboardInterrupt:
         logger.info("Posting interrupted by user")
