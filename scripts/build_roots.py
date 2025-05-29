@@ -31,24 +31,26 @@ class WiktionaryProcessor:
         self.min_word_length = min_word_length
         self.max_word_length = max_word_length
         
-        # Patterns to extract roots from etymology text
+        # Improved patterns focusing on actual etymological roots
         self.root_patterns = [
-            # Latin/Greek/Sanskrit roots
-            r'from\s+(?:Latin|Greek|Sanskrit|Proto-Indo-European|PIE|Old English|Middle English)\s+[*]?([a-zA-Z\-]+)',
-            r'(?:Latin|Greek|Sanskrit|PIE)\s+[*]?([a-zA-Z\-]+)',
+            # Proto-language reconstructions (asterisked forms) - highest priority
+            r'Proto-[A-Za-z-]+\s+\*([a-zA-Z\-ₐ₁₂₃₄₅₆₇₈₉₀]+)',
+            r'PIE\s+\*([a-zA-Z\-ₐ₁₂₃₄₅₆₇₈₉₀]+)',
+            r'Proto-Indo-European\s+\*([a-zA-Z\-ₐ₁₂₃₄₅₆₇₈₉₀]+)',
             
-            # Root mentions
-            r'root\s+[*]?([a-zA-Z\-]+)',
-            r'from\s+root\s+[*]?([a-zA-Z\-]+)',
+            # Other asterisked reconstructions
+            r'\*([a-zA-Z\-ₐ₁₂₃₄₅₆₇₈₉₀]{3,})\b',  # Any asterisked form, min 3 chars
             
-            # Proto-language reconstructions
-            r'from\s+Proto-[A-Za-z-]+\s+[*]([a-zA-Z\-]+)',
-            r'[*]([a-zA-Z\-]+)\s+\(root\)',
+            # Explicit root statements
+            r'from\s+(?:the\s+)?root\s+\*?([a-zA-Z\-ₐ₁₂₃₄₅₆₇₈₉₀]{3,})',
+            r'ultimately\s+from\s+\*([a-zA-Z\-ₐ₁₂₃₄₅₆₇₈₉₀]{3,})',
             
-            # Direct etymology patterns
-            r'ultimately\s+from\s+[*]?([a-zA-Z\-]+)',
-            r'derived\s+from\s+[*]?([a-zA-Z\-]+)',
-            r'cognate\s+with\s+[*]?([a-zA-Z\-]+)',
+            # Sanskrit/Latin roots (typically appear in specific patterns)
+            r'Sanskrit\s+([a-zA-Z\-]{3,})\s*\(',  # Sanskrit roots usually followed by parentheses
+            r'Latin\s+([a-zA-Z\-]{3,})\s*\(',     # Latin roots usually followed by parentheses
+            
+            # Root endings that indicate they're actual roots, not language names
+            r'from\s+([a-zA-Z\-]*(?:ghen|bhel|wegh|dʰeh|gwem|treud|stel|bʰer|ǵʰen)[a-zA-Z\-]*)',
         ]
         
         # Compile patterns for efficiency
@@ -84,19 +86,40 @@ class WiktionaryProcessor:
         """Extract roots from etymology text using regex patterns."""
         if not etymology_text:
             return set()
-        
+
         roots = set()
         
         for pattern in self.compiled_patterns:
             matches = pattern.findall(etymology_text)
             for match in matches:
-                # Clean up the root
-                root = re.sub(r'[^a-zA-Z\-]', '', match).strip('-').lower()
+                # Clean up the root more carefully
+                # Remove asterisks but keep special etymological characters
+                root = match.strip('*').strip()
                 
-                # Validate root length and format
-                if 2 <= len(root) <= 20 and root.isalpha():
-                    roots.add(root)
-        
+                # Remove only certain punctuation, keep diacritics and special chars
+                root = re.sub(r'[^\w\-ₐ₁₂₃₄₅₆₇₈₉₀ʰʷʸʲᵃᵇᶜᵈᵉᶠᵍʰⁱʲᵏˡᵐⁿᵒᵖʳˢᵗᵘᵛʷˣʸᶻ]', '', root)
+                root = root.strip('-').lower()
+                
+                # Skip obvious non-roots (language names, common words, etc.)
+                skip_patterns = {
+                    'dutch', 'german', 'english', 'french', 'latin', 'greek', 'sanskrit',
+                    'middle', 'old', 'proto', 'ancient', 'early', 'cognate', 'related',
+                    'compare', 'see', 'also', 'word', 'term', 'meaning', 'sense',
+                    'literally', 'originally', 'probably', 'possibly', 'perhaps',
+                    'scots', 'welsh', 'irish', 'norse', 'germanic', 'celtic', 'slavic',
+                    'saterland', 'frisian', 'lithuanian', 'latvian', 'polish',
+                    'influenced', 'borrowed', 'related', 'akin'
+                }
+                
+                if root.lower() in skip_patterns:
+                    continue
+                
+                # Validate root format - must be substantive and look like a root
+                if 3 <= len(root) <= 25 and not root.isdigit():
+                    # Additional checks for valid roots
+                    if any(c.isalpha() for c in root):  # Must contain letters
+                        roots.add(root)
+
         return roots
     
     def process_entry(self, entry: dict) -> List[tuple]:
