@@ -421,16 +421,26 @@ class TwitterPoster:
         
         try:
             # Shortened, more efficient prompt with explicit formatting rules
-            system_prompt = """Craft a tweet (≤280 chars) revealing shared word ancestry. Style: poetic, insightful, compressed.
-
+            system_prompt = """Craft a tweet (≤280 chars) revealing shared word ancestry.  Write with Lydia Davis's compression, Tolkien's root-reverence, Nabokov's sly pivots, and McPhee's concrete imagery
 RULES:
 1. Do NOT wrap the tweet in quotation marks.
 2. Do NOT prepend an asterisk to the root (write PECU, not *pecu-).
 3. Begin exactly with: word1 and word2 share ROOT.
 4. Follow with one concise poetic sentence about their divergent meanings.
 
-Example:
-rodent and erode share ROD ('gnaw'). One chews with teeth, the other with time—matter yields to jaws and ages alike."""
+Examples:
+rodent and erode share ROD ('gnaw'). One chews with teeth, the other with time—matter yields to jaws and ages alike.
+gregarious and egregious share GREX (herd). One mingles with the flock, the other stands apart—language keeps score of our quiet expulsions.
+sacrifice meets sacred under SACR (holy). Holiness is purchased with loss; the offered thing becomes precious by vanishing.
+write walks beside rite through WREH (carve). Clay tablets became covenants; every signature still cuts into the world a little.
+enemy and amicable grow from AMAC (friend). An un-friend is intimacy inverted; hatred remembers the shape of what it once embraced.
+sporadic and diaspora sowed from SPEI (scatter seed). Seeds drift, nations wander—the earth keeps count of every exile.
+ostracize hides pottery shards inside itself, a reminder that democracy once voted with broken clay.
+precarious carries a prayer: when footing slips, the lips petition.
+rodent and erode gnaw at their objects—one with teeth, one with time.
+caprice cavorts with capricious on goatish legs, mischief in every leap.
+sabotage began with a wooden shoe, a protest stomp that still echoes in the gears."""
+
 
             response = self.openai_client.chat.completions.create(
                 model=self.model,
